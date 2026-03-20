@@ -6,6 +6,8 @@ import { ConfigModule } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AuthModule } from './app/module/auth/auth.module';
 import { BlogModule } from './app/module/blog/blog.module';
+import { SubscriberModule } from './app/module/subscriber/subscriber.module';
+import { PaymentModule } from './app/module/payment/payment.module';
 
 import config from './app/config';
 
@@ -16,6 +18,8 @@ import config from './app/config';
     MongooseModule.forRoot(config.mongoUri as string),
     AuthModule,
     BlogModule,
+    SubscriberModule,
+    PaymentModule,
   ],
   controllers: [AppController],
   providers: [AppService],

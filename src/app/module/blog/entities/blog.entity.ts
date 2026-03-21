@@ -5,28 +5,28 @@ export type BlogDocument = HydratedDocument<Blog>;
 
 @Schema({ timestamps: true })
 export class Blog {
-  @Prop()
+  @Prop({ type: [String] })
   image: string[];
 
-  @Prop()
+  @Prop({ type: [String] })
   audio: string[];
 
   @Prop()
   link: string;
 
-  @Prop()
+  @Prop({ type: [String] })
   attachment: string[];
 
   @Prop()
   category: string;
 
-  @Prop()
+  @Prop({ required: true })
   title: string;
 
   @Prop()
   content: string;
 
-  @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'User' })
+  @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true })
   author: mongoose.Schema.Types.ObjectId;
 
   @Prop({ enum: ['free', 'paid'], default: 'free' })

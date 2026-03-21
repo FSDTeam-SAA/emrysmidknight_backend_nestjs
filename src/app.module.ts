@@ -8,6 +8,7 @@ import { AuthModule } from './app/module/auth/auth.module';
 import { BlogModule } from './app/module/blog/blog.module';
 import { SubscriberModule } from './app/module/subscriber/subscriber.module';
 import { PaymentModule } from './app/module/payment/payment.module';
+import { UserSubscriptionModule } from './app/module/user-subscription/user-subscription.module';
 
 import config from './app/config';
 
@@ -20,6 +21,7 @@ import config from './app/config';
     BlogModule,
     SubscriberModule,
     PaymentModule,
+    UserSubscriptionModule,
   ],
   controllers: [AppController],
   providers: [AppService],

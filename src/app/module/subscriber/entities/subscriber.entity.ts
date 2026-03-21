@@ -1,14 +1,31 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import mongoose, { HydratedDocument } from 'mongoose';
 
-export type SubscriberDocument = HydratedDocument<Subscriber>;
+export type SubscriptionDocument = HydratedDocument<Subscription>;
 
 @Schema({ timestamps: true })
-export class Subscriber {
-  @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'User' })
-  author: mongoose.Schema.Types.ObjectId;
-  @Prop({ type: [mongoose.Schema.Types.ObjectId], ref: 'User' })
-  subscribers: mongoose.Schema.Types.ObjectId[];
+export class Subscription {
+  @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true })
+  author: mongoose.Types.ObjectId;
+
+  @Prop({ required: true })
+  name: string;
+
+  @Prop({ required: true })
+  price: number;
+
+  @Prop({ enum: ['monthly', 'yearly'], required: true })
+  duration: string;
+
+  @Prop({ type: [String], default: [] })
+  features: string[];
+
+  @Prop({
+    type: [mongoose.Schema.Types.ObjectId],
+    ref: 'Blog',
+    default: [],
+  })
+  blogs: mongoose.Types.ObjectId[];
 }
 
-export const SubscriberSchema = SchemaFactory.createForClass(Subscriber);
+export const SubscriptionSchema = SchemaFactory.createForClass(Subscription);

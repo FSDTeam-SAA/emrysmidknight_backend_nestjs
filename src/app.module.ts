@@ -9,6 +9,7 @@ import { BlogModule } from './app/module/blog/blog.module';
 import { SubscriberModule } from './app/module/subscriber/subscriber.module';
 import { PaymentModule } from './app/module/payment/payment.module';
 import { UserSubscriptionModule } from './app/module/user-subscription/user-subscription.module';
+import { WebhookModule } from './app/module/webhook/webhook.module';
 
 import config from './app/config';
 
@@ -22,6 +23,7 @@ import config from './app/config';
     SubscriberModule,
     PaymentModule,
     UserSubscriptionModule,
+    WebhookModule,
   ],
   controllers: [AppController],
   providers: [AppService],

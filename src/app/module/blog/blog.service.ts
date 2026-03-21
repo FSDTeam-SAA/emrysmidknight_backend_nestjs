@@ -87,6 +87,7 @@ export class BlogService {
 
     const result = await this.blogModel.create({
       ...createBlogDto,
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       author: user._id as any,
     });
     return result;

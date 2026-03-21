@@ -294,6 +294,41 @@ export class UserController {
     };
   }
 
+  @Get('/stripe-account')
+  @ApiOperation({
+    summary: 'Get Stripe account / dashboard link for the authenticated author',
+    description:
+      'Returns the Stripe Express dashboard login link if onboarding is complete, ' +
+      'or a fresh onboarding link if setup is still pending.',
+  })
+  @ApiBearerAuth('access-token')
+  @UseGuards(AuthGuard('author'))
+  @HttpCode(HttpStatus.OK)
+  async getAuthorStripeAccount(@Req() req: Request) {
+    const result = await this.userService.getAuthorStripeAccount(req.user!.id);
+    return {
+      message: result.message,
+      data: result,
+    };
+  }
+
+  @Post('/stripe-account')
+  @ApiOperation({
+    summary: 'Create a Stripe Express account for the authenticated author',
+    description:
+      'Creates a new Stripe Express account and returns an onboarding link. ' +
+      'Throws 400 if the author already has an account.',
+  })
+  @ApiBearerAuth('access-token')
+  @UseGuards(AuthGuard('author'))
+  @HttpCode(HttpStatus.CREATED)
+  async createAuthorStripeAccount(@Req() req: Request) {
+    const result = await this.userService.authorStripeAccount(req.user!.id);
+    return {
+      message: result.message,
+      data: result,
+    };
+  }
   @Get(':id')
   @ApiOperation({
     summary: 'Get single user by id',

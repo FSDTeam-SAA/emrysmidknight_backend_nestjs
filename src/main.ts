@@ -33,10 +33,10 @@ async function bootstrap() {
   app.useGlobalFilters(new GlobalExceptionFilter(httpAdapterHost));
 
   const swaggerConfig = new DocumentBuilder()
-    .setTitle('Arthurloo API')
-    .setDescription('Arthurloo API Documentation')
+    .setTitle('Emrysmidknight API')
+    .setDescription('Emrysmidknight API Documentation')
     .setVersion('1.0')
-    .addTag('arthurloo')
+    .addTag('Emrysmidknight')
     .addBearerAuth(
       {
         type: 'http',

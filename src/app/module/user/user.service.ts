@@ -33,6 +33,23 @@ export class UserService {
     this.stripe = new Stripe(config.stripe.secretKey!);
   }
 
+  private getStripeRefreshUrl() {
+    return `${config.frontendUrl}/connect/refresh`;
+  }
+
+  private getStripeReturnUrl() {
+    return `${config.frontendUrl}/stripe-account-success`;
+  }
+
+  private async createOnboardingLink(accountId: string) {
+    return this.stripe.accountLinks.create({
+      account: accountId,
+      refresh_url: this.getStripeRefreshUrl(),
+      return_url: this.getStripeReturnUrl(),
+      type: 'account_onboarding',
+    });
+  }
+
   async createUser(createUserDto: CreateUserDto, file?: Express.Multer.File) {
     const user = await this.userModel.findOne({ email: createUserDto.email });
     if (user) {
@@ -137,10 +154,7 @@ export class UserService {
     if (!user) throw new HttpException('User not found', 404);
 
     if (user.stripeAccountId) {
-      throw new HttpException(
-        'Stripe account already exists. Use GET /user/stripe-account to access it.',
-        400,
-      );
+      return this.getAuthorStripeAccount(userId);
     }
 
     const nameParts = (user.fullName ?? '').trim().split(/\s+/);
@@ -159,7 +173,7 @@ export class UserService {
       business_profile: {
         name: 'emrysmidknight',
         product_description: 'blogging website',
-        url: 'https://your-default-website.com',
+        url: config.frontendUrl,
       },
       settings: {
         payments: {
@@ -174,14 +188,11 @@ export class UserService {
     user.stripeAccountId = account.id;
     await user.save();
 
-    const accountLink = await this.stripe.accountLinks.create({
-      account: account.id,
-      refresh_url: `${config.frontendUrl}/connect/refresh`,
-      return_url: `${config.frontendUrl}/stripe-account-success`,
-      type: 'account_onboarding',
-    });
+    const accountLink = await this.createOnboardingLink(account.id);
 
     return {
+      accountId: account.id,
+      onboardingComplete: false,
       url: accountLink.url,
       message: 'Stripe onboarding link created successfully',
     };
@@ -198,19 +209,45 @@ export class UserService {
       );
     }
 
-    const account = await this.stripe.accounts.retrieve(user.stripeAccountId);
-    if (!account)
-      throw new HttpException('Failed to retrieve Stripe account', 500);
+    let account: Stripe.Response<Stripe.Account>;
+    try {
+      account = await this.stripe.accounts.retrieve(user.stripeAccountId);
+    } catch (error: any) {
+      if (error?.code === 'resource_missing') {
+        user.stripeAccountId = '';
+        await user.save();
+        throw new HttpException(
+          'Stored Stripe account was not found. Please create it again.',
+          400,
+        );
+      }
 
-    if (!account.details_submitted) {
-      const accountLink = await this.stripe.accountLinks.create({
-        account: user.stripeAccountId,
-        refresh_url: `${config.frontendUrl}/connect/refresh`,
-        return_url: `${config.frontendUrl}/stripe-account-success`,
-        type: 'account_onboarding',
-      });
+      throw new HttpException(
+        error?.message || 'Failed to retrieve Stripe account',
+        500,
+      );
+    }
+
+    if ('deleted' in account && account.deleted) {
+      user.stripeAccountId = '';
+      await user.save();
+      throw new HttpException(
+        'Stored Stripe account is no longer available. Please create it again.',
+        400,
+      );
+    }
+
+    const onboardingComplete = Boolean(
+      account.details_submitted && account.charges_enabled && account.payouts_enabled,
+    );
+
+    if (!onboardingComplete) {
+      const accountLink = await this.createOnboardingLink(user.stripeAccountId);
       return {
         onboardingComplete: false,
+        accountId: user.stripeAccountId,
+        chargesEnabled: account.charges_enabled,
+        payoutsEnabled: account.payouts_enabled,
         url: accountLink.url,
         message: 'Stripe onboarding is incomplete. Please complete it.',
       };
@@ -222,6 +259,9 @@ export class UserService {
 
     return {
       onboardingComplete: true,
+      accountId: user.stripeAccountId,
+      chargesEnabled: account.charges_enabled,
+      payoutsEnabled: account.payouts_enabled,
       url: loginLink.url,
       message: 'Stripe account retrieved successfully',
     };

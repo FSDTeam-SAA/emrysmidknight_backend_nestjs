@@ -9,12 +9,27 @@ import { fileUpload } from 'src/app/helpers/fileUploder';
 import { IFilterParams } from 'src/app/helpers/pick';
 import paginationHelper, { IOptions } from 'src/app/helpers/pagenation';
 import buildWhereConditions from 'src/app/helpers/buildWhereConditions';
+import { Payment, PaymentDocument } from '../payment/entities/payment.entity';
+import {
+  UserSubscription,
+  UserSubscriptionDocument,
+} from '../user-subscription/entities/user-subscription.entity';
+import {
+  Subscription,
+  SubscriptionDocument,
+} from '../subscriber/entities/subscriber.entity';
 
 @Injectable()
 export class BlogService {
   constructor(
     @InjectModel(Blog.name) private readonly blogModel: Model<BlogDocument>,
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
+    @InjectModel(Payment.name)
+    private readonly paymentModel: Model<PaymentDocument>,
+    @InjectModel(UserSubscription.name)
+    private readonly userSubscriptionModel: Model<UserSubscriptionDocument>,
+    @InjectModel(Subscription.name)
+    private readonly subscriptionModel: Model<SubscriptionDocument>,
   ) {}
 
   private sanitizeBlogUpdatePayload(updateBlogDto: UpdateBlogDto) {
@@ -153,6 +168,76 @@ export class BlogService {
       },
       data: result,
     };
+  }
+
+  async singleBlogPardFree(userId: string, id: string) {
+    const user = await this.userModel.findById(userId);
+    if (!user) {
+      throw new HttpException('User not found', 404);
+    }
+    const result = await this.blogModel.findById(id).populate('author');
+
+    if (!result) {
+      throw new HttpException('Blog not found', 404);
+    }
+
+    if (
+      result.audienceType !== 'paid' ||
+      result.price <= 0 ||
+      (result.author as any)._id.toString() === userId
+    ) {
+      return result;
+    }
+
+    const directPayment = await this.paymentModel.findOne({
+      user: user._id,
+      blog: result._id,
+      paymentType: 'blog',
+      status: 'completed',
+    } as any);
+
+    if (directPayment) {
+      return result;
+    }
+
+    const now = new Date();
+    await this.userSubscriptionModel.updateMany(
+      {
+        user: user._id,
+        isActive: true,
+        expiryDate: { $lt: now },
+      } as any,
+      {
+        $set: { isActive: false },
+      },
+    );
+
+    const activeSubscriptions = await this.userSubscriptionModel.find({
+      user: user._id,
+      isActive: true,
+      expiryDate: { $gt: now },
+    } as any);
+
+    const planIds = activeSubscriptions
+      .map((item) => item.plan?.toString())
+      .filter(Boolean);
+
+    if (planIds.length) {
+      const coveringPlan = await this.subscriptionModel.findOne({
+        _id: { $in: planIds },
+        blogs: result._id,
+      } as any);
+
+      if (coveringPlan) {
+        return result;
+      }
+    }
+
+    if (result.audienceType === 'paid') {
+      throw new HttpException('You are not allowed to access this blog', 403);
+    }
+
+    return result;
   }
 
   async getSingleBlog(id: string) {

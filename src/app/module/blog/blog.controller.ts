@@ -183,6 +183,21 @@ export class BlogController {
     };
   }
 
+  @Get('reader/access/:id')
+  @ApiOperation({
+    summary: 'Get blog details for a reader with free/paid/subscription access check',
+  })
+  @ApiBearerAuth('access-token')
+  @UseGuards(AuthGuard('reader', 'author'))
+  @HttpCode(HttpStatus.OK)
+  async getAccessibleBlog(@Req() req: Request, @Param('id') id: string) {
+    const result = await this.blogService.singleBlogPardFree(req.user!.id, id);
+    return {
+      message: 'Blog fetched successfully',
+      data: result,
+    };
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get a blog by id' })
   @HttpCode(HttpStatus.OK)

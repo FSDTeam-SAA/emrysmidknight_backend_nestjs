@@ -269,10 +269,12 @@ export class SubscriberController {
   @UseGuards(AuthGuard('author'))
   @HttpCode(HttpStatus.OK)
   async update(
+    @Req() req: Request,
     @Param('id') id: string,
     @Body() updateSubscriberDto: UpdateSubscriberDto,
   ) {
     const result = await this.subscriberService.updateSubscription(
+      req.user!.id,
       id,
       updateSubscriberDto,
     );
@@ -288,8 +290,11 @@ export class SubscriberController {
   @ApiBearerAuth('access-token')
   @UseGuards(AuthGuard('author'))
   @HttpCode(HttpStatus.OK)
-  async remove(@Param('id') id: string) {
-    const result = await this.subscriberService.deleteSubscription(id);
+  async remove(@Req() req: Request, @Param('id') id: string) {
+    const result = await this.subscriberService.deleteSubscription(
+      req.user!.id,
+      id,
+    );
     return {
       message: 'Subscription deleted successfully',
       data: result,

@@ -1,34 +1,56 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import { UserSubscriptionService } from './user-subscription.service';
-import { CreateUserSubscriptionDto } from './dto/create-user-subscription.dto';
-import { UpdateUserSubscriptionDto } from './dto/update-user-subscription.dto';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import AuthGuard from 'src/app/middlewares/auth.guard';
+import type { Request } from 'express';
 
+@ApiTags('user-subscription')
 @Controller('user-subscription')
 export class UserSubscriptionController {
-  constructor(private readonly userSubscriptionService: UserSubscriptionService) {}
+  constructor(
+    private readonly userSubscriptionService: UserSubscriptionService,
+  ) {}
 
-  @Post()
-  create(@Body() createUserSubscriptionDto: CreateUserSubscriptionDto) {
-    return this.userSubscriptionService.create(createUserSubscriptionDto);
+  @Get('my-active')
+  @ApiOperation({ summary: 'Get my active subscriptions' })
+  @ApiBearerAuth('access-token')
+  @UseGuards(AuthGuard('reader'))
+  @HttpCode(HttpStatus.OK)
+  async getMyActiveSubscriptions(@Req() req: Request) {
+    const result = await this.userSubscriptionService.getMyActiveSubscriptions(
+      req.user!.id,
+    );
+
+    return {
+      message: 'Active subscriptions fetched successfully',
+      data: result,
+    };
   }
 
-  @Get()
-  findAll() {
-    return this.userSubscriptionService.findAll();
-  }
+  @Get('blog-access/:blogId')
+  @ApiOperation({
+    summary: 'Check whether the authenticated reader can access a blog',
+  })
+  @ApiBearerAuth('access-token')
+  @UseGuards(AuthGuard('reader'))
+  @HttpCode(HttpStatus.OK)
+  async checkBlogAccess(@Req() req: Request, @Param('blogId') blogId: string) {
+    const result = await this.userSubscriptionService.checkBlogAccess(
+      req.user!.id,
+      blogId,
+    );
 
-  @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.userSubscriptionService.findOne(+id);
-  }
-
-  @Patch(':id')
-  update(@Param('id') id: string, @Body() updateUserSubscriptionDto: UpdateUserSubscriptionDto) {
-    return this.userSubscriptionService.update(+id, updateUserSubscriptionDto);
-  }
-
-  @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.userSubscriptionService.remove(+id);
+    return {
+      message: 'Blog access checked successfully',
+      data: result,
+    };
   }
 }

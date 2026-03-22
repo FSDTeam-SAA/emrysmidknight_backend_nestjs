@@ -10,7 +10,7 @@ export class UserSubscription {
 
   @Prop({
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'SubscriptionPlan',
+    ref: 'Subscription',
     required: true,
   })
   plan: mongoose.Schema.Types.ObjectId;

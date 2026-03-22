@@ -1,34 +1,37 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import {
+  Controller,
+  Headers,
+  HttpCode,
+  HttpStatus,
+  Post,
+  Req,
+  Res,
+} from '@nestjs/common';
 import { WebhookService } from './webhook.service';
-import { CreateWebhookDto } from './dto/create-webhook.dto';
-import { UpdateWebhookDto } from './dto/update-webhook.dto';
+import type { RawBodyRequest } from '@nestjs/common';
+import type { Request, Response } from 'express';
 
 @Controller('webhook')
 export class WebhookController {
   constructor(private readonly webhookService: WebhookService) {}
 
   @Post()
-  create(@Body() createWebhookDto: CreateWebhookDto) {
-    return this.webhookService.create(createWebhookDto);
-  }
+  @HttpCode(HttpStatus.OK)
+  async handleStripeWebhook(
+    @Req() req: RawBodyRequest<Request>,
+    @Res() res: Response,
+    @Headers('stripe-signature') signature: string,
+  ) {
+    const rawPayload = req.rawBody
+      ? req.rawBody
+      : Buffer.isBuffer(req.body)
+        ? req.body
+        : Buffer.from(JSON.stringify(req.body ?? {}));
 
-  @Get()
-  findAll() {
-    return this.webhookService.findAll();
-  }
-
-  @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.webhookService.findOne(+id);
-  }
-
-  @Patch(':id')
-  update(@Param('id') id: string, @Body() updateWebhookDto: UpdateWebhookDto) {
-    return this.webhookService.update(+id, updateWebhookDto);
-  }
-
-  @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.webhookService.remove(+id);
+    return this.webhookService.handleWebhook(
+      rawPayload,
+      signature,
+      res,
+    );
   }
 }

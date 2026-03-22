@@ -28,6 +28,27 @@ export class SubscriberService {
     }
   }
 
+  private async validateSubscriptionBlogs(authorId: string, blogIds: string[]) {
+    if (!blogIds?.length) {
+      throw new BadRequestException(
+        'At least one paid blog is required for a subscription plan',
+      );
+    }
+
+    const uniqueBlogIds = [...new Set(blogIds)];
+    const blogs = await this.blogModel.find({
+      _id: { $in: uniqueBlogIds },
+      author: authorId,
+      audienceType: 'paid',
+    } as any);
+
+    if (blogs.length !== uniqueBlogIds.length) {
+      throw new BadRequestException(
+        'Subscription blogs must belong to the author and be paid blogs',
+      );
+    }
+  }
+
   async createSubscription(
     authorId: string,
     createSubscriberDto: CreateSubscriberDto,
@@ -36,9 +57,13 @@ export class SubscriberService {
     if (!author) {
       throw new HttpException('Author not found', 404);
     }
+
+    await this.validateSubscriptionBlogs(authorId, createSubscriberDto.blogs);
+
     const result = await this.subscriptionModel.create({
       author: author._id,
       ...createSubscriberDto,
+      blogs: [...new Set(createSubscriberDto.blogs)],
     });
     return result;
   }
@@ -145,10 +170,28 @@ export class SubscriberService {
   }
 
   async updateSubscription(
+    authorId: string,
     id: string,
     updateSubscriberDto: UpdateSubscriberDto,
   ) {
     this.validateObjectId(id, 'subscriptionId');
+    const subscription = await this.subscriptionModel.findById(id);
+    if (!subscription) {
+      throw new HttpException('Subscription not found', 404);
+    }
+
+    if (subscription.author.toString() !== authorId) {
+      throw new HttpException(
+        'You are not allowed to update this subscription',
+        403,
+      );
+    }
+
+    if (updateSubscriberDto.blogs) {
+      await this.validateSubscriptionBlogs(authorId, updateSubscriberDto.blogs);
+      updateSubscriberDto.blogs = [...new Set(updateSubscriberDto.blogs)];
+    }
+
     const result = await this.subscriptionModel.findByIdAndUpdate(
       id,
       updateSubscriberDto,
@@ -157,12 +200,20 @@ export class SubscriberService {
     return result;
   }
 
-  async deleteSubscription(id: string) {
+  async deleteSubscription(authorId: string, id: string) {
     this.validateObjectId(id, 'subscriptionId');
     const subscribe = await this.subscriptionModel.findById(id);
     if (!subscribe) {
       throw new HttpException('Subscription not found', 404);
     }
+
+    if (subscribe.author.toString() !== authorId) {
+      throw new HttpException(
+        'You are not allowed to delete this subscription',
+        403,
+      );
+    }
+
     const result = await this.subscriptionModel.findByIdAndDelete(id);
     return result;
   }

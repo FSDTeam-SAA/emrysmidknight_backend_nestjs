@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { HydratedDocument } from 'mongoose';
+import mongoose, { HydratedDocument, Types } from 'mongoose';
 export type UserDocument = HydratedDocument<User>;
 import * as bcrypt from 'bcrypt';
 import config from '../../../config';
@@ -68,6 +68,12 @@ export class User {
 
   @Prop()
   stripeAccountId: string;
+
+  @Prop({ type: [mongoose.Schema.Types.ObjectId], ref: 'Follower' })
+  followersReaders: Types.ObjectId[];
+
+  @Prop({ type: [mongoose.Schema.Types.ObjectId], ref: 'Follower' })
+  followingAuthors: Types.ObjectId[];
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

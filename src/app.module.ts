@@ -11,6 +11,7 @@ import { PaymentModule } from './app/module/payment/payment.module';
 import { UserSubscriptionModule } from './app/module/user-subscription/user-subscription.module';
 import { WebhookModule } from './app/module/webhook/webhook.module';
 import { FollowersModule } from './app/module/followers/followers.module';
+import { CommentModule } from './app/module/comment/comment.module';
 
 import config from './app/config';
 
@@ -26,6 +27,7 @@ import config from './app/config';
     UserSubscriptionModule,
     WebhookModule,
     FollowersModule,
+    CommentModule,
   ],
   controllers: [AppController],
   providers: [AppService],

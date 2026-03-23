@@ -258,7 +258,7 @@ export class UserController {
     summary: 'Get the profile of the currently authenticated user',
   })
   @ApiBearerAuth('access-token')
-  @UseGuards(AuthGuard('admin', 'teacher', 'parent', 'student'))
+  @UseGuards(AuthGuard('admin', 'author', 'reader'))
   @HttpCode(HttpStatus.OK)
   async getProfile(@Req() req: Request) {
     const user = await this.userService.getProfile(req.user!.id);
@@ -274,7 +274,7 @@ export class UserController {
   })
   @ApiBearerAuth('access-token')
   @ApiConsumes('multipart/form-data')
-  @UseGuards(AuthGuard('admin', 'teacher', 'parent', 'student'))
+  @UseGuards(AuthGuard('admin', 'author', 'reader'))
   @UseInterceptors(FileInterceptor('profilePicture', fileUpload.uploadConfig))
   @ApiBody({ type: UpdateUserDto })
   @HttpCode(HttpStatus.OK)

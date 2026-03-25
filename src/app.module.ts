@@ -12,6 +12,7 @@ import { UserSubscriptionModule } from './app/module/user-subscription/user-subs
 import { WebhookModule } from './app/module/webhook/webhook.module';
 import { FollowersModule } from './app/module/followers/followers.module';
 import { CommentModule } from './app/module/comment/comment.module';
+import { BookmarkModule } from './app/module/bookmark/bookmark.module';
 
 import config from './app/config';
 
@@ -28,6 +29,7 @@ import config from './app/config';
     WebhookModule,
     FollowersModule,
     CommentModule,
+    BookmarkModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -68,7 +68,8 @@ export class CommentService {
       .find(whereConditions)
       .skip(skip)
       .limit(limit)
-      .sort({ [sortBy]: sortOrder } as any);
+      .sort({ [sortBy]: sortOrder } as any)
+      .populate('user');
     return {
       meta: {
         page,
@@ -80,7 +81,10 @@ export class CommentService {
   }
 
   async getCommentById(id: string) {
-    const result = await this.commentModel.findById(id);
+    const result = await this.commentModel
+      .findById(id)
+      .populate('user')
+      .populate('blog');
     if (!result) throw new HttpException('Comment not found', 404);
     return result;
   }
@@ -120,6 +124,42 @@ export class CommentService {
       );
     const result = await this.commentModel.findByIdAndDelete(id);
     if (!result) throw new HttpException('Comment not found', 404);
+    return result;
+  }
+
+  async replayComment(
+    userId: string,
+    blogId: string,
+    commentId: string,
+    replayCommentDto: CreateCommentDto,
+  ) {
+    const blogCheck = await this.blogModel.findById(blogId);
+    if (!blogCheck) throw new HttpException('Blog not found', 404);
+
+    const user = await this.userModel.findById(userId);
+    if (!user) throw new HttpException('User not found', 404);
+
+    const commentCheck = await this.commentModel.findById(commentId);
+    if (!commentCheck) throw new HttpException('Comment not found', 404);
+
+    if (user._id.toString() === commentCheck.user.toString())
+      throw new HttpException('You can not replay your own comment', 400);
+
+    const result = await this.commentModel.create({
+      ...replayCommentDto,
+      user: user._id,
+      blog: blogCheck._id,
+      parentComment: commentCheck._id,
+    });
+
+    await this.userModel.findByIdAndUpdate(user._id, {
+      $addToSet: { comments: result._id },
+    });
+
+    await this.blogModel.findByIdAndUpdate(blogCheck._id, {
+      $addToSet: { comments: result._id },
+    });
+
     return result;
   }
 }

@@ -329,6 +329,37 @@ export class UserController {
       data: result,
     };
   }
+
+  @Get('top-authors')
+  @ApiOperation({
+    summary: 'Get top authors based on following count',
+  })
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    type: Number,
+    example: 1,
+    description: 'Page number. Default is 1',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    example: 10,
+    description: 'Items per page. Default is 10',
+  })
+  @HttpCode(HttpStatus.OK)
+  async topAuthors(@Req() req: Request) {
+    const options = pick(req.query, ['limit', 'page']);
+    const result = await this.userService.topAuthors(options);
+
+    return {
+      message: 'Top authors fetched successfully',
+      meta: result.meta,
+      data: result.data,
+    };
+  }
+
   @Get(':id')
   @ApiOperation({
     summary: 'Get single user by id',

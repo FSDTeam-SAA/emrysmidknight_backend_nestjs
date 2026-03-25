@@ -238,7 +238,9 @@ export class UserService {
     }
 
     const onboardingComplete = Boolean(
-      account.details_submitted && account.charges_enabled && account.payouts_enabled,
+      account.details_submitted &&
+      account.charges_enabled &&
+      account.payouts_enabled,
     );
 
     if (!onboardingComplete) {
@@ -264,6 +266,50 @@ export class UserService {
       payoutsEnabled: account.payouts_enabled,
       url: loginLink.url,
       message: 'Stripe account retrieved successfully',
+    };
+  }
+
+  async topAuthors(options: IOptions) {
+    const { limit, page, skip } = paginationHelper(options);
+    const whereConditions = {
+      role: 'author',
+    };
+
+    const total = await this.userModel.countDocuments(whereConditions);
+    const users = await this.userModel.aggregate([
+      {
+        $match: whereConditions,
+      },
+      {
+        $addFields: {
+          followersReadersCount: {
+            $size: {
+              $ifNull: ['$followersReaders', []],
+            },
+          },
+        },
+      },
+      {
+        $sort: {
+          followersReadersCount: -1,
+          createdAt: -1,
+        },
+      },
+      {
+        $skip: skip,
+      },
+      {
+        $limit: limit,
+      },
+    ]);
+
+    return {
+      meta: {
+        page,
+        limit,
+        total,
+      },
+      data: users,
     };
   }
 }

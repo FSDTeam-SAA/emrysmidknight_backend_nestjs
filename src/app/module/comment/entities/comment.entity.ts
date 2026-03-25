@@ -11,6 +11,9 @@ export class Comment {
   @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'Blog', required: true })
   blog: Types.ObjectId;
 
+  @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'Comment', default: null })
+  parentComment?: Types.ObjectId;
+
   @Prop({ required: true })
   text: string;
 

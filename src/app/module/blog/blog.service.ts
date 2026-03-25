@@ -315,4 +315,31 @@ export class BlogService {
     }
     return result;
   }
+  async likeUnlikeBlog(userId: string, blogId: string) {
+    const user = await this.userModel.findById(userId);
+    if (!user) throw new HttpException('User not found', 404);
+
+    const blog = await this.blogModel.findById(blogId);
+    if (!blog) throw new HttpException('Blog not found', 404);
+
+    const userIdString = user._id.toString();
+    const alreadyLiked = blog.likes.some(
+      (likeUserId) => likeUserId.toString() === userIdString,
+    );
+
+    if (alreadyLiked) {
+      blog.likes = blog.likes.filter(
+        (likeUserId) => likeUserId.toString() !== userIdString,
+      );
+    } else {
+      blog.likes.push(user._id);
+    }
+
+    const result = await blog.save();
+
+    return {
+      liked: !alreadyLiked,
+      blog: result,
+    };
+  }
 }

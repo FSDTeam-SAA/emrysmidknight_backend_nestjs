@@ -9,7 +9,6 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
-  Res,
   Req,
 } from '@nestjs/common';
 import { CommentService } from './comment.service';
@@ -129,6 +128,101 @@ export class CommentController {
     const result = await this.commentService.getCommentById(commentId);
     return {
       message: 'Comment fetched successfully',
+      data: result,
+    };
+  }
+
+  @Patch('my/:commentId')
+  @ApiOperation({ summary: 'Update my comment' })
+  @ApiBearerAuth('access-token')
+  @ApiParam({
+    name: 'commentId',
+    type: String,
+    example: '',
+    description: 'Comment id',
+  })
+  @ApiBody({ type: UpdateCommentDto })
+  @UseGuards(AuthGuard('reader'))
+  @HttpCode(HttpStatus.OK)
+  async updateMyComment(
+    @Req() req: Request,
+    @Param('commentId') commentId: string,
+    @Body() updateCommentDto: UpdateCommentDto,
+  ) {
+    const readerId = req.user!.id;
+    const result = await this.commentService.updateMyComment(
+      readerId,
+      commentId,
+      updateCommentDto,
+    );
+
+    return {
+      message: 'Comment updated successfully',
+      data: result,
+    };
+  }
+
+  @Delete('my/:commentId')
+  @ApiOperation({ summary: 'Delete my comment' })
+  @ApiBearerAuth('access-token')
+  @ApiParam({
+    name: 'commentId',
+    type: String,
+    example: '',
+    description: 'Comment id',
+  })
+  @UseGuards(AuthGuard('reader'))
+  @HttpCode(HttpStatus.OK)
+  async deleteMyComment(
+    @Req() req: Request,
+    @Param('commentId') commentId: string,
+  ) {
+    const readerId = req.user!.id;
+    const result = await this.commentService.deleteMyComment(
+      readerId,
+      commentId,
+    );
+
+    return {
+      message: 'Comment deleted successfully',
+      data: result,
+    };
+  }
+
+  @Post(':blogId/reply/:commentId')
+  @ApiOperation({ summary: 'Reply to comment' })
+  @ApiBearerAuth('access-token')
+  @ApiParam({
+    name: 'blogId',
+    type: String,
+    example: '',
+    description: 'Blog id',
+  })
+  @ApiParam({
+    name: 'commentId',
+    type: String,
+    example: '',
+    description: 'Parent comment id',
+  })
+  @ApiBody({ type: CreateCommentDto })
+  @UseGuards(AuthGuard('reader', 'author'))
+  @HttpCode(HttpStatus.CREATED)
+  async replayComment(
+    @Req() req: Request,
+    @Param('blogId') blogId: string,
+    @Param('commentId') commentId: string,
+    @Body() replayCommentDto: CreateCommentDto,
+  ) {
+    const userId = req.user!.id;
+    const result = await this.commentService.replayComment(
+      userId,
+      blogId,
+      commentId,
+      replayCommentDto,
+    );
+
+    return {
+      message: 'Reply created successfully',
       data: result,
     };
   }

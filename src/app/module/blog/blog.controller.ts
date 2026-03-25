@@ -23,10 +23,13 @@ import {
   ApiBearerAuth,
   ApiConsumes,
   ApiOperation,
+  ApiParam,
   ApiQuery,
+  ApiTags,
 } from '@nestjs/swagger';
 import pick from 'src/app/helpers/pick';
 
+@ApiTags('Blog')
 @Controller('blog')
 export class BlogController {
   constructor(private readonly blogService: BlogService) {}
@@ -249,6 +252,28 @@ export class BlogController {
     return {
       message: 'Blog deleted successfully',
       data: result,
+    };
+  }
+
+  @Post(':id/like-unlike')
+  @ApiOperation({ summary: 'Like or unlike a blog' })
+  @ApiBearerAuth('access-token')
+  @ApiParam({
+    name: 'id',
+    type: String,
+    example: '',
+    description: 'Blog id',
+  })
+  @UseGuards(AuthGuard('author', 'reader'))
+  @HttpCode(HttpStatus.OK)
+  async likeUnlikeBlog(@Req() req: Request, @Param('id') id: string) {
+    const result = await this.blogService.likeUnlikeBlog(req.user!.id, id);
+
+    return {
+      message: result.liked
+        ? 'Blog liked successfully'
+        : 'Blog unliked successfully',
+      data: result.blog,
     };
   }
 }

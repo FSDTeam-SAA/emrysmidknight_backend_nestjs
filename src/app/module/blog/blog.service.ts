@@ -342,4 +342,25 @@ export class BlogService {
       blog: result,
     };
   }
+
+  async getAllTrendingStory(options: IOptions) {
+    const { limit, page, skip, sortBy, sortOrder } = paginationHelper(options);
+    const result = await this.blogModel
+      .find({
+        likes: { $exists: true, $ne: [] },
+      })
+      .skip(skip)
+      .limit(limit)
+      .sort({ [sortBy]: sortOrder } as any)
+      .populate('author');
+    const total = await this.blogModel.countDocuments();
+    return {
+      meta: {
+        page,
+        limit,
+        total,
+      },
+      data: result,
+    };
+  }
 }

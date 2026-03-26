@@ -186,9 +186,44 @@ export class BlogController {
     };
   }
 
+  @Get('/trending-story')
+  @ApiOperation({ summary: 'Get my all trending story' })
+  // @ApiBearerAuth('access-token')
+  // @UseGuards(AuthGuard('author, reader'))
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    type: Number,
+    description: 'Page number',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Number of items per page',
+  })
+  @ApiQuery({ name: 'sortBy', required: false, type: String })
+  @ApiQuery({
+    name: 'sortOrder',
+    required: false,
+    type: String,
+    enum: ['asc', 'desc'],
+  })
+  @HttpCode(HttpStatus.OK)
+  async getAllTrendingStory(@Req() req: Request) {
+    const options = pick(req.query, ['page', 'limit', 'sortBy', 'sortOrder']);
+    const result = await this.blogService.getAllTrendingStory(options);
+    return {
+      message: 'Trending story fetched successfully',
+      meta: result.meta,
+      data: result.data,
+    };
+  }
+
   @Get('reader/access/:id')
   @ApiOperation({
-    summary: 'Get blog details for a reader with free/paid/subscription access check',
+    summary:
+      'Get blog details for a reader with free/paid/subscription access check',
   })
   @ApiBearerAuth('access-token')
   @UseGuards(AuthGuard('reader', 'author'))

@@ -25,6 +25,60 @@ import pick from 'src/app/helpers/pick';
 export class FollowersController {
   constructor(private readonly followersService: FollowersService) {}
 
+  @Get('my-followers')
+  @ApiOperation({ summary: 'Get my followers' })
+  @ApiBearerAuth('access-token')
+  @ApiQuery({
+    name: 'searchTerm',
+    required: false,
+    type: String,
+    example: '',
+    description: 'Search by follower or author related text fields',
+  })
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    type: Number,
+    example: 1,
+    description: 'Page number. Default is 1',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    example: 10,
+    description: 'Items per page. Default is 10',
+  })
+  @ApiQuery({
+    name: 'sortBy',
+    required: false,
+    type: String,
+    example: 'createdAt',
+    description: 'Sort field. Default is createdAt',
+  })
+  @ApiQuery({
+    name: 'sortOrder',
+    required: false,
+    enum: ['asc', 'desc'],
+    example: 'desc',
+    description: 'Sort order. Default is desc',
+  })
+  @UseGuards(AuthGuard('reader', 'author', 'admin'))
+  @HttpCode(HttpStatus.OK)
+  async getMyFollowers(@Req() req: Request) {
+    const filters = pick(req.query, ['searchTerm', 'followers', 'author']);
+    const options = pick(req.query, ['page', 'limit', 'sortBy', 'sortOrder']);
+    const result = await this.followersService.getMyFollowers(
+      req.user!.id,
+      filters,
+      options,
+    );
+    return {
+      message: 'My followers fetched successfully',
+      data: result,
+    };
+  }
+
   @Post(':authorId')
   @ApiOperation({ summary: 'Create follower' })
   @ApiBearerAuth('access-token')

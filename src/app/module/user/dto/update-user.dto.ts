@@ -38,6 +38,14 @@ export class UpdateUserDto extends PartialType(CreateUserDto) {
   @Transform(emptyStringToUndefined)
   profilePicture?: any;
 
+  @ApiPropertyOptional({
+    type: 'string',
+    format: 'binary',
+    description: 'Cover picture file upload',
+  })
+  @Transform(emptyStringToUndefined)
+  coverPicture?: any;
+
   @Transform(emptyStringToUndefined)
   status?: string;
 

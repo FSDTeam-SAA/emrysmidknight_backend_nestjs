@@ -55,6 +55,9 @@ export class User {
   profilePicture: string;
 
   @Prop()
+  coverPicture: string;
+
+  @Prop()
   dateOfBirth?: Date;
 
   @Prop()

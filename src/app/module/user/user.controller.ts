@@ -12,11 +12,12 @@ import {
   Param,
   Put,
   Delete,
+  UploadedFiles,
 } from '@nestjs/common';
 import { UserService } from './user.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { fileUpload } from 'src/app/helpers/fileUploder';
 import {
   ApiBearerAuth,
@@ -42,7 +43,15 @@ export class UserController {
   @ApiBearerAuth('access-token')
   @ApiConsumes('multipart/form-data')
   @UseGuards(AuthGuard('admin'))
-  @UseInterceptors(FileInterceptor('profilePicture', fileUpload.uploadConfig))
+  @UseInterceptors(
+    FileFieldsInterceptor(
+      [
+        { name: 'profilePicture', maxCount: 1 },
+        { name: 'coverPicture', maxCount: 1 },
+      ],
+      fileUpload.uploadConfig,
+    ),
+  )
   @ApiBody({
     schema: {
       type: 'object',
@@ -66,6 +75,11 @@ export class UserController {
         bio: { type: 'string', example: 'Math teacher' },
 
         profilePicture: {
+          type: 'string',
+          format: 'binary',
+        },
+
+        coverPicture: {
           type: 'string',
           format: 'binary',
         },
@@ -107,9 +121,13 @@ export class UserController {
   @HttpCode(HttpStatus.CREATED)
   async createUser(
     @Body() createUserDto: CreateUserDto,
-    @UploadedFile() file: Express.Multer.File,
+    @UploadedFiles() files: { profilePicture?: Express.Multer.File[]; coverPicture?: Express.Multer.File[] },
   ) {
-    const result = await this.userService.createUser(createUserDto, file);
+    const result = await this.userService.createUser(
+      createUserDto,
+      files?.profilePicture?.[0],
+      files?.coverPicture?.[0],
+    );
 
     return {
       message: 'User created successfully',
@@ -275,18 +293,27 @@ export class UserController {
   @ApiBearerAuth('access-token')
   @ApiConsumes('multipart/form-data')
   @UseGuards(AuthGuard('admin', 'author', 'reader'))
-  @UseInterceptors(FileInterceptor('profilePicture', fileUpload.uploadConfig))
+  @UseInterceptors(
+    FileFieldsInterceptor(
+      [
+        { name: 'profilePicture', maxCount: 1 },
+        { name: 'coverPicture', maxCount: 1 },
+      ],
+      fileUpload.uploadConfig,
+    ),
+  )
   @ApiBody({ type: UpdateUserDto })
   @HttpCode(HttpStatus.OK)
   async updateProfile(
     @Req() req: Request,
     @Body() updateUserDto: UpdateUserDto,
-    @UploadedFile() file?: Express.Multer.File,
+    @UploadedFiles() files?: { profilePicture?: Express.Multer.File[]; coverPicture?: Express.Multer.File[] },
   ) {
     const result = await this.userService.updateMyProfile(
       req.user!.id,
       updateUserDto,
-      file,
+      files?.profilePicture?.[0],
+      files?.coverPicture?.[0],
     );
     return {
       message: 'User updated successfully',
@@ -388,15 +415,28 @@ export class UserController {
   @ApiBearerAuth('access-token')
   @ApiConsumes('multipart/form-data')
   @UseGuards(AuthGuard('admin'))
-  @UseInterceptors(FileInterceptor('profilePicture', fileUpload.uploadConfig))
+  @UseInterceptors(
+    FileFieldsInterceptor(
+      [
+        { name: 'profilePicture', maxCount: 1 },
+        { name: 'coverPicture', maxCount: 1 },
+      ],
+      fileUpload.uploadConfig,
+    ),
+  )
   @ApiBody({ type: UpdateUserDto })
   @HttpCode(HttpStatus.OK)
   async updateUser(
     @Param('id') id: string,
     @Body() updateUserDto: UpdateUserDto,
-    @UploadedFile() file?: Express.Multer.File,
+    @UploadedFiles() files?: { profilePicture?: Express.Multer.File[]; coverPicture?: Express.Multer.File[] },
   ) {
-    const result = await this.userService.updateUser(id, updateUserDto, file);
+    const result = await this.userService.updateUser(
+      id,
+      updateUserDto,
+      files?.profilePicture?.[0],
+      files?.coverPicture?.[0],
+    );
 
     return {
       message: 'User updated successfully',

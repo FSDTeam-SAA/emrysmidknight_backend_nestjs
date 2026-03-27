@@ -12,6 +12,9 @@ import {
   Subscription,
   SubscriptionDocument,
 } from '../subscriber/entities/subscriber.entity';
+import { IFilterParams } from 'src/app/helpers/pick';
+import paginationHelper, { IOptions } from 'src/app/helpers/pagenation';
+import buildWhereConditions from 'src/app/helpers/buildWhereConditions';
 
 @Injectable()
 export class PaymentService {
@@ -303,5 +306,35 @@ export class PaymentService {
       adminAmount,
       authorAmount,
     );
+  }
+
+  async getMyPayments(
+    userId: string,
+    params: IFilterParams,
+    options: IOptions,
+  ) {
+    const user = await this.userModel.findById(userId);
+    if (!user) throw new HttpException('User not found', 404);
+    const { limit, page, skip, sortBy, sortOrder } = paginationHelper(options);
+    const whereConditions = buildWhereConditions(params, ['name', 'email'], {
+      user: userId,
+    });
+    const total = await this.paymentModel.countDocuments(whereConditions);
+    const payments = await this.paymentModel
+      .find(whereConditions)
+      .skip(skip)
+      .limit(limit)
+      .sort({ [sortBy]: sortOrder } as any)
+      .populate('user')
+      .populate('blog')
+      .populate('plan');
+    return {
+      meta: {
+        page,
+        limit,
+        total,
+      },
+      data: payments,
+    };
   }
 }

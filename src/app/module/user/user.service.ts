@@ -50,7 +50,11 @@ export class UserService {
     });
   }
 
-  async createUser(createUserDto: CreateUserDto, file?: Express.Multer.File) {
+  async createUser(
+    createUserDto: CreateUserDto,
+    file?: Express.Multer.File,
+    coverFile?: Express.Multer.File,
+  ) {
     const user = await this.userModel.findOne({ email: createUserDto.email });
     if (user) {
       throw new HttpException('User already exists', 400);
@@ -58,6 +62,10 @@ export class UserService {
     if (file) {
       const uploadedFile = await fileUpload.uploadToCloudinary(file);
       createUserDto.profilePicture = uploadedFile.url;
+    }
+    if (coverFile) {
+      const uploadedFile = await fileUpload.uploadToCloudinary(coverFile);
+      createUserDto.coverPicture = uploadedFile.url;
     }
     const createdUser = await this.userModel.create(createUserDto);
     return createdUser;
@@ -96,6 +104,7 @@ export class UserService {
     id: string,
     updateUserDto: UpdateUserDto,
     file?: Express.Multer.File,
+    coverFile?: Express.Multer.File,
   ) {
     const user = await this.userModel.findById(id);
     if (!user) {
@@ -104,6 +113,10 @@ export class UserService {
     if (file) {
       const uploadedFile = await fileUpload.uploadToCloudinary(file);
       updateUserDto.profilePicture = uploadedFile.url;
+    }
+    if (coverFile) {
+      const uploadedFile = await fileUpload.uploadToCloudinary(coverFile);
+      updateUserDto.coverPicture = uploadedFile.url;
     }
     const updatedUser = await this.userModel.findByIdAndUpdate(
       id,
@@ -134,6 +147,7 @@ export class UserService {
     id: string,
     updateUserDto: UpdateUserDto,
     file?: Express.Multer.File,
+    coverFile?: Express.Multer.File,
   ) {
     const user = await this.userModel.findById(id);
     if (!user) {
@@ -142,6 +156,10 @@ export class UserService {
     if (file) {
       const uploadedFile = await fileUpload.uploadToCloudinary(file);
       updateUserDto.profilePicture = uploadedFile.url;
+    }
+    if (coverFile) {
+      const uploadedFile = await fileUpload.uploadToCloudinary(coverFile);
+      updateUserDto.coverPicture = uploadedFile.url;
     }
     const result = await this.userModel.findByIdAndUpdate(id, updateUserDto, {
       new: true,

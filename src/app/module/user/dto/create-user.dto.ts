@@ -60,6 +60,11 @@ export class CreateUserDto {
 
   @ApiPropertyOptional({ example: '' })
   @IsOptional()
+  @IsString()
+  coverPicture?: string;
+
+  @ApiPropertyOptional({ example: '' })
+  @IsOptional()
   @IsDateString()
   dateOfBirth?: Date;
 

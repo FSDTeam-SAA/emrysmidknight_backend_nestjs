@@ -76,7 +76,10 @@ export class FollowersService {
     if (!follower) throw new HttpException('Follower not found', 404);
 
     if (follower.followers.toString() !== userId) {
-      throw new HttpException('You are not allowed to unfollow this record', 403);
+      throw new HttpException(
+        'You are not allowed to unfollow this record',
+        403,
+      );
     }
 
     const result = await this.followerModel.findByIdAndDelete(id);
@@ -89,5 +92,34 @@ export class FollowersService {
       }),
     ]);
     return result;
+  }
+
+  async getMyFollowers(
+    userId: string,
+    params: IFilterParams,
+    options: IOptions,
+  ) {
+    const user = await this.userModel.findById(userId);
+    if (!user) throw new HttpException('User not found', 404);
+    const { limit, page, skip, sortBy, sortOrder } = paginationHelper(options);
+    const whereConditions = buildWhereConditions(params, ['name', 'email'], {
+      followers: userId,
+    });
+    const total = await this.followerModel.countDocuments(whereConditions);
+    const users = await this.followerModel
+      .find(whereConditions)
+      .skip(skip)
+      .limit(limit)
+      .sort({ [sortBy]: sortOrder } as any)
+      .populate('followers')
+      .populate('author');
+    return {
+      meta: {
+        page,
+        limit,
+        total,
+      },
+      data: users,
+    };
   }
 }

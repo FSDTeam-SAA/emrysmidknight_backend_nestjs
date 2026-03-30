@@ -1,3 +1,4 @@
+
 import { Injectable, Logger } from '@nestjs/common';
 import { CreateWebhookDto } from './dto/create-webhook.dto';
 import { UpdateWebhookDto } from './dto/update-webhook.dto';
@@ -17,6 +18,8 @@ import {
   UserSubscriptionDocument,
 } from '../user-subscription/entities/user-subscription.entity';
 import type { Response } from 'express';
+import { NotificationService } from '../notification/notification.service';
+import { NotificationType } from '../notification/entities/notification.entity';
 
 @Injectable()
 export class WebhookService {
@@ -36,6 +39,7 @@ export class WebhookService {
 
     @InjectModel(UserSubscription.name)
     private readonly userSubscriptionModel: Model<UserSubscriptionDocument>,
+    private readonly notificationService: NotificationService,
   ) {}
 
   async handleWebhook(rawBody: Buffer, sig: string, res: Response) {
@@ -132,12 +136,21 @@ export class WebhookService {
       Number((Number(payment.amount ?? blog.price ?? 0) * 0.1).toFixed(2));
     const authorAmount =
       payment.authorAmount ??
-      Number((Number(payment.amount ?? blog.price ?? 0) - adminAmount).toFixed(2));
+      Number(
+        (Number(payment.amount ?? blog.price ?? 0) - adminAmount).toFixed(2),
+      );
 
     payment.adminAmount = adminAmount;
     payment.authorAmount = authorAmount;
 
     await payment.save();
+
+    await this.notificationService.sendNotification({
+      recipientId: user._id.toString(),
+      message: `Your payment was successful! You have unlocked "${blog.title}".`,
+      type: NotificationType.PAYMENT_SUCCESS,
+      blogId: blog._id.toString(),
+    });
 
     return res.json({
       received: true,
@@ -161,10 +174,11 @@ export class WebhookService {
 
     payment.plan = plan._id as any;
     payment.paymentType = 'subscription';
-    payment.amount = Number(session.metadata?.price ?? payment.amount ?? plan.price);
+    payment.amount = Number(
+      session.metadata?.price ?? payment.amount ?? plan.price,
+    );
     payment.adminAmount =
-      payment.adminAmount ??
-      Number((Number(payment.amount) * 0.1).toFixed(2));
+      payment.adminAmount ?? Number((Number(payment.amount) * 0.1).toFixed(2));
     payment.authorAmount =
       payment.authorAmount ??
       Number((Number(payment.amount) - payment.adminAmount).toFixed(2));
@@ -194,6 +208,12 @@ export class WebhookService {
         setDefaultsOnInsert: true,
       },
     );
+
+    await this.notificationService.sendNotification({
+      recipientId: user._id.toString(),
+      message: `Your subscription payment was successful! You are now subscribed to "${plan.name}".`,
+      type: NotificationType.PAYMENT_SUCCESS,
+    });
 
     return res.json({
       received: true,
@@ -249,6 +269,12 @@ export class WebhookService {
     if (payment) {
       payment.status = 'failed';
       await payment.save();
+
+      await this.notificationService.sendNotification({
+        recipientId: payment.user.toString(),
+        message: `Your payment failed or was declined. Please try again.`,
+        type: NotificationType.PAYMENT_FAILED,
+      });
     }
 
     return res.json({ received: true });

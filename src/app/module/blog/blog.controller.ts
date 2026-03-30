@@ -1,3 +1,5 @@
+// blog.controller.ts
+
 import {
   Controller,
   Get,
@@ -58,48 +60,23 @@ export class BlogController {
     },
   ) {
     const userId = req.user!.id;
-
     const result = await this.blogService.createBlog(
       userId,
       createBlogDto,
       files,
     );
-
-    return {
-      message: 'Blog created successfully',
-      data: result,
-    };
+    return { message: 'Blog created successfully', data: result };
   }
 
   @Get()
   @ApiOperation({ summary: 'Get all blogs' })
-  @ApiQuery({
-    name: 'searchTerm',
-    required: false,
-    type: String,
-    description: 'Search keywords',
-  })
+  @ApiQuery({ name: 'searchTerm', required: false, type: String })
   @ApiQuery({ name: 'title', required: false, type: String })
   @ApiQuery({ name: 'content', required: false, type: String })
-  @ApiQuery({
-    name: 'audienceType',
-    required: false,
-    type: String,
-    description: 'E.g., free, paid',
-  })
+  @ApiQuery({ name: 'audienceType', required: false, type: String })
   @ApiQuery({ name: 'category', required: false, type: String })
-  @ApiQuery({
-    name: 'page',
-    required: false,
-    type: Number,
-    description: 'Page number',
-  })
-  @ApiQuery({
-    name: 'limit',
-    required: false,
-    type: Number,
-    description: 'Number of items per page',
-  })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiQuery({ name: 'sortBy', required: false, type: String })
   @ApiQuery({
     name: 'sortOrder',
@@ -128,34 +105,14 @@ export class BlogController {
   @Get('/my-blogs')
   @ApiOperation({ summary: 'Get my all blogs' })
   @ApiBearerAuth('access-token')
-  @UseGuards(AuthGuard('author'))
-  @ApiQuery({
-    name: 'searchTerm',
-    required: false,
-    type: String,
-    description: 'Search keywords',
-  })
+  @UseGuards(AuthGuard('author', 'reader'))
+  @ApiQuery({ name: 'searchTerm', required: false, type: String })
   @ApiQuery({ name: 'title', required: false, type: String })
   @ApiQuery({ name: 'content', required: false, type: String })
-  @ApiQuery({
-    name: 'audienceType',
-    required: false,
-    type: String,
-    description: 'E.g., free, paid',
-  })
+  @ApiQuery({ name: 'audienceType', required: false, type: String })
   @ApiQuery({ name: 'category', required: false, type: String })
-  @ApiQuery({
-    name: 'page',
-    required: false,
-    type: Number,
-    description: 'Page number',
-  })
-  @ApiQuery({
-    name: 'limit',
-    required: false,
-    type: Number,
-    description: 'Number of items per page',
-  })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiQuery({ name: 'sortBy', required: false, type: String })
   @ApiQuery({
     name: 'sortOrder',
@@ -187,21 +144,9 @@ export class BlogController {
   }
 
   @Get('/trending-story')
-  @ApiOperation({ summary: 'Get my all trending story' })
-  // @ApiBearerAuth('access-token')
-  // @UseGuards(AuthGuard('author, reader'))
-  @ApiQuery({
-    name: 'page',
-    required: false,
-    type: Number,
-    description: 'Page number',
-  })
-  @ApiQuery({
-    name: 'limit',
-    required: false,
-    type: Number,
-    description: 'Number of items per page',
-  })
+  @ApiOperation({ summary: 'Get all trending stories' })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiQuery({ name: 'sortBy', required: false, type: String })
   @ApiQuery({
     name: 'sortOrder',
@@ -220,20 +165,46 @@ export class BlogController {
     };
   }
 
+  @Get('/blogs-with-lock-status')
+  @ApiOperation({
+    summary: 'Get all blogs with lock/unlock status for logged-in user',
+  })
+  @ApiBearerAuth('access-token')
+  @UseGuards(AuthGuard('author', 'reader'))
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiQuery({ name: 'sortBy', required: false, type: String })
+  @ApiQuery({
+    name: 'sortOrder',
+    required: false,
+    type: String,
+    enum: ['asc', 'desc'],
+  })
+  @HttpCode(HttpStatus.OK)
+  async getBlogsWithLockStatus(@Req() req: Request) {
+    const userId = req.user!.id;
+    const options = pick(req.query, ['page', 'limit', 'sortBy', 'sortOrder']);
+    const result = await this.blogService.getBlogsWithLockStatus(
+      userId,
+      options,
+    );
+    return {
+      message: 'Blogs fetched successfully',
+      meta: result.meta,
+      data: result.data,
+    };
+  }
+
   @Get('reader/access/:id')
   @ApiOperation({
-    summary:
-      'Get blog details for a reader with free/paid/subscription access check',
+    summary: 'Get blog details with free/paid/subscription access check',
   })
   @ApiBearerAuth('access-token')
   @UseGuards(AuthGuard('reader', 'author'))
   @HttpCode(HttpStatus.OK)
   async getAccessibleBlog(@Req() req: Request, @Param('id') id: string) {
     const result = await this.blogService.singleBlogPardFree(req.user!.id, id);
-    return {
-      message: 'Blog fetched successfully',
-      data: result,
-    };
+    return { message: 'Blog fetched successfully', data: result };
   }
 
   @Get(':id')
@@ -241,10 +212,7 @@ export class BlogController {
   @HttpCode(HttpStatus.OK)
   async getBlogById(@Param('id') id: string) {
     const result = await this.blogService.getSingleBlog(id);
-    return {
-      message: 'Blog fetched successfully',
-      data: result,
-    };
+    return { message: 'Blog fetched successfully', data: result };
   }
 
   @Patch(':id')
@@ -271,10 +239,7 @@ export class BlogController {
     },
   ) {
     const result = await this.blogService.updateBlog(id, updateBlogDto, files);
-    return {
-      message: 'Blog updated successfully',
-      data: result,
-    };
+    return { message: 'Blog updated successfully', data: result };
   }
 
   @Delete(':id')
@@ -284,26 +249,17 @@ export class BlogController {
   @HttpCode(HttpStatus.OK)
   async deleteBlog(@Param('id') id: string) {
     const result = await this.blogService.deleteBlog(id);
-    return {
-      message: 'Blog deleted successfully',
-      data: result,
-    };
+    return { message: 'Blog deleted successfully', data: result };
   }
 
   @Post(':id/like-unlike')
   @ApiOperation({ summary: 'Like or unlike a blog' })
   @ApiBearerAuth('access-token')
-  @ApiParam({
-    name: 'id',
-    type: String,
-    example: '',
-    description: 'Blog id',
-  })
+  @ApiParam({ name: 'id', type: String, description: 'Blog id' })
   @UseGuards(AuthGuard('author', 'reader'))
   @HttpCode(HttpStatus.OK)
   async likeUnlikeBlog(@Req() req: Request, @Param('id') id: string) {
     const result = await this.blogService.likeUnlikeBlog(req.user!.id, id);
-
     return {
       message: result.liked
         ? 'Blog liked successfully'

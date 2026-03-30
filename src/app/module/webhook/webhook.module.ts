@@ -13,6 +13,7 @@ import {
   UserSubscription,
   UserSubscriptionSchema,
 } from '../user-subscription/entities/user-subscription.entity';
+import { NotificationModule } from '../notification/notification.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import {
       { name: Payment.name, schema: PaymentSchema },
       { name: UserSubscription.name, schema: UserSubscriptionSchema },
     ]),
+    NotificationModule,
   ],
   controllers: [WebhookController],
   providers: [WebhookService],

@@ -6,6 +6,8 @@ import { User, UserDocument } from '../user/entities/user.entity';
 import { IFilterParams } from 'src/app/helpers/pick';
 import paginationHelper, { IOptions } from 'src/app/helpers/pagenation';
 import buildWhereConditions from 'src/app/helpers/buildWhereConditions';
+import { NotificationService } from '../notification/notification.service';
+import { NotificationType } from '../notification/entities/notification.entity';
 
 @Injectable()
 export class FollowersService {
@@ -14,6 +16,7 @@ export class FollowersService {
     private readonly followerModel: Model<FollowerDocument>,
     @InjectModel(User.name)
     private readonly userModel: Model<UserDocument>,
+    private readonly notificationService: NotificationService,
   ) {}
 
   async createFollower(readerId: string, authorId: string) {
@@ -36,6 +39,13 @@ export class FollowersService {
         $addToSet: { followersReaders: result._id },
       }),
     ]);
+
+    await this.notificationService.sendNotification({
+      recipientId: author._id.toString(),
+      senderId: reader._id.toString(),
+      message: `${reader.fullName} has started following you!`,
+      type: NotificationType.AUTHOR_FOLLOW_UPDATE,
+    });
 
     return result;
   }

@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { BlogService } from './blog.service';
+import { NotificationModule } from '../notification/notification.module';
 import { BlogController } from './blog.controller';
 import { MongooseModule } from '@nestjs/mongoose';
 import { User, UserSchema } from '../user/entities/user.entity';
@@ -13,15 +14,21 @@ import {
   Subscription,
   SubscriptionSchema,
 } from '../subscriber/entities/subscriber.entity';
+import {
+  Follower,
+  FollowerSchema,
+} from '../followers/entities/follower.entity';
 
 @Module({
   imports: [
+    NotificationModule,
     MongooseModule.forFeature([
       { name: User.name, schema: UserSchema },
       { name: Blog.name, schema: BlogSchema },
       { name: Payment.name, schema: PaymentSchema },
       { name: UserSubscription.name, schema: UserSubscriptionSchema },
       { name: Subscription.name, schema: SubscriptionSchema },
+      { name: Follower.name, schema: FollowerSchema },
     ]),
   ],
   controllers: [BlogController],

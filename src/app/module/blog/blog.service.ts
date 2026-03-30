@@ -1,3 +1,5 @@
+// blog.service.ts
+
 import { HttpException, Injectable } from '@nestjs/common';
 import { CreateBlogDto } from './dto/create-blog.dto';
 import { UpdateBlogDto } from './dto/update-blog.dto';
@@ -18,6 +20,9 @@ import {
   Subscription,
   SubscriptionDocument,
 } from '../subscriber/entities/subscriber.entity';
+import { NotificationService } from '../notification/notification.service';
+import { NotificationType } from '../notification/entities/notification.entity';
+import { Follower, FollowerDocument } from '../followers/entities/follower.entity';
 
 @Injectable()
 export class BlogService {
@@ -30,23 +35,17 @@ export class BlogService {
     private readonly userSubscriptionModel: Model<UserSubscriptionDocument>,
     @InjectModel(Subscription.name)
     private readonly subscriptionModel: Model<SubscriptionDocument>,
+    @InjectModel(Follower.name)
+    private readonly followerModel: Model<FollowerDocument>,
+    private readonly notificationService: NotificationService,
   ) {}
 
   private sanitizeBlogUpdatePayload(updateBlogDto: UpdateBlogDto) {
     return Object.fromEntries(
       Object.entries(updateBlogDto).filter(([_, value]) => {
-        if (value === undefined || value === null) {
-          return false;
-        }
-
-        if (typeof value === 'string' && value.trim() === '') {
-          return false;
-        }
-
-        if (typeof value === 'number' && Number.isNaN(value)) {
-          return false;
-        }
-
+        if (value === undefined || value === null) return false;
+        if (typeof value === 'string' && value.trim() === '') return false;
+        if (typeof value === 'number' && Number.isNaN(value)) return false;
         return true;
       }),
     );
@@ -62,14 +61,12 @@ export class BlogService {
     },
   ) {
     const user = await this.userModel.findById(userId);
-    if (!user) {
-      throw new HttpException('User not found', 404);
-    }
+    if (!user) throw new HttpException('User not found', 404);
 
     if (files) {
       const uploadPromises: Promise<void>[] = [];
 
-      if (files.image && files.image.length > 0) {
+      if (files.image?.length) {
         uploadPromises.push(
           Promise.all(
             files.image.map((file) => fileUpload.uploadToCloudinary(file)),
@@ -78,7 +75,7 @@ export class BlogService {
           }),
         );
       }
-      if (files.audio && files.audio.length > 0) {
+      if (files.audio?.length) {
         uploadPromises.push(
           Promise.all(
             files.audio.map((file) => fileUpload.uploadToCloudinary(file)),
@@ -87,7 +84,7 @@ export class BlogService {
           }),
         );
       }
-      if (files.attachment && files.attachment.length > 0) {
+      if (files.attachment?.length) {
         uploadPromises.push(
           Promise.all(
             files.attachment.map((file) => fileUpload.uploadToCloudinary(file)),
@@ -102,9 +99,28 @@ export class BlogService {
 
     const result = await this.blogModel.create({
       ...createBlogDto,
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       author: user._id as any,
     });
+    
+    // Notify all followers
+    const followers = await this.followerModel.find({ author: user._id });
+    const notifType = result.audienceType === 'paid' ? NotificationType.PREMIUM_CONTENT : NotificationType.AUTHOR_POST;
+    
+    const notificationPromises = followers.map((f) => {
+      const isPaid = result.audienceType === 'paid';
+      const message = `${user.fullName} has published a new ${isPaid ? 'premium ' : ''}story "${result.title}"${isPaid ? ' Subscribe to unlock and continue reading.' : ''}`;
+      
+      return this.notificationService.sendNotification({
+        recipientId: f.followers.toString(),
+        senderId: user._id.toString(),
+        message,
+        type: notifType,
+        blogId: result._id.toString(),
+      });
+    });
+
+    await Promise.all(notificationPromises);
+
     return result;
   }
 
@@ -124,14 +140,7 @@ export class BlogService {
       .limit(limit)
       .sort({ [sortBy]: sortOrder } as any)
       .populate('author');
-    return {
-      meta: {
-        page,
-        limit,
-        total,
-      },
-      data: result,
-    };
+    return { meta: { page, limit, total }, data: result };
   }
 
   async getAllMyBlogs(
@@ -140,9 +149,8 @@ export class BlogService {
     options: IOptions,
   ) {
     const user = await this.userModel.findById(userId);
-    if (!user) {
-      throw new HttpException('User not found', 404);
-    }
+    if (!user) throw new HttpException('User not found', 404);
+
     const blogSearchAbleFields = [
       'title',
       'content',
@@ -160,26 +168,15 @@ export class BlogService {
       .limit(limit)
       .sort({ [sortBy]: sortOrder } as any)
       .populate('author');
-    return {
-      meta: {
-        page,
-        limit,
-        total,
-      },
-      data: result,
-    };
+    return { meta: { page, limit, total }, data: result };
   }
 
   async singleBlogPardFree(userId: string, id: string) {
     const user = await this.userModel.findById(userId);
-    if (!user) {
-      throw new HttpException('User not found', 404);
-    }
-    const result = await this.blogModel.findById(id).populate('author');
+    if (!user) throw new HttpException('User not found', 404);
 
-    if (!result) {
-      throw new HttpException('Blog not found', 404);
-    }
+    const result = await this.blogModel.findById(id).populate('author');
+    if (!result) throw new HttpException('Blog not found', 404);
 
     if (
       result.audienceType !== 'paid' ||
@@ -196,20 +193,12 @@ export class BlogService {
       status: 'completed',
     } as any);
 
-    if (directPayment) {
-      return result;
-    }
+    if (directPayment) return result;
 
     const now = new Date();
     await this.userSubscriptionModel.updateMany(
-      {
-        user: user._id,
-        isActive: true,
-        expiryDate: { $lt: now },
-      } as any,
-      {
-        $set: { isActive: false },
-      },
+      { user: user._id, isActive: true, expiryDate: { $lt: now } } as any,
+      { $set: { isActive: false } },
     );
 
     const activeSubscriptions = await this.userSubscriptionModel.find({
@@ -228,23 +217,15 @@ export class BlogService {
         blogs: result._id,
       } as any);
 
-      if (coveringPlan) {
-        return result;
-      }
+      if (coveringPlan) return result;
     }
 
-    if (result.audienceType === 'paid') {
-      throw new HttpException('You are not allowed to access this blog', 403);
-    }
-
-    return result;
+    throw new HttpException('You are not allowed to access this blog', 403);
   }
 
   async getSingleBlog(id: string) {
     const result = await this.blogModel.findById(id).populate('author');
-    if (!result) {
-      throw new HttpException('Blog not found', 404);
-    }
+    if (!result) throw new HttpException('Blog not found', 404);
     return result;
   }
 
@@ -260,7 +241,7 @@ export class BlogService {
     if (files) {
       const uploadPromises: Promise<void>[] = [];
 
-      if (files.image && files.image.length > 0) {
+      if (files.image?.length) {
         uploadPromises.push(
           Promise.all(
             files.image.map((file) => fileUpload.uploadToCloudinary(file)),
@@ -269,7 +250,7 @@ export class BlogService {
           }),
         );
       }
-      if (files.audio && files.audio.length > 0) {
+      if (files.audio?.length) {
         uploadPromises.push(
           Promise.all(
             files.audio.map((file) => fileUpload.uploadToCloudinary(file)),
@@ -278,7 +259,7 @@ export class BlogService {
           }),
         );
       }
-      if (files.attachment && files.attachment.length > 0) {
+      if (files.attachment?.length) {
         uploadPromises.push(
           Promise.all(
             files.attachment.map((file) => fileUpload.uploadToCloudinary(file)),
@@ -293,28 +274,21 @@ export class BlogService {
 
     const sanitizedUpdateBlogDto =
       this.sanitizeBlogUpdatePayload(updateBlogDto);
-
     const result = await this.blogModel.findByIdAndUpdate(
       id,
       { $set: sanitizedUpdateBlogDto },
-      {
-        new: true,
-        runValidators: true,
-      },
+      { new: true, runValidators: true },
     );
-    if (!result) {
-      throw new HttpException('Blog not found', 404);
-    }
+    if (!result) throw new HttpException('Blog not found', 404);
     return result;
   }
 
   async deleteBlog(id: string) {
     const result = await this.blogModel.findByIdAndDelete(id);
-    if (!result) {
-      throw new HttpException('Blog not found', 404);
-    }
+    if (!result) throw new HttpException('Blog not found', 404);
     return result;
   }
+
   async likeUnlikeBlog(userId: string, blogId: string) {
     const user = await this.userModel.findById(userId);
     if (!user) throw new HttpException('User not found', 404);
@@ -336,31 +310,87 @@ export class BlogService {
     }
 
     const result = await blog.save();
-
-    return {
-      liked: !alreadyLiked,
-      blog: result,
-    };
+    return { liked: !alreadyLiked, blog: result };
   }
 
   async getAllTrendingStory(options: IOptions) {
     const { limit, page, skip, sortBy, sortOrder } = paginationHelper(options);
     const result = await this.blogModel
-      .find({
-        likes: { $exists: true, $ne: [] },
-      })
+      .find({ likes: { $exists: true, $ne: [] } })
       .skip(skip)
       .limit(limit)
       .sort({ [sortBy]: sortOrder } as any)
       .populate('author');
     const total = await this.blogModel.countDocuments();
-    return {
-      meta: {
-        page,
-        limit,
-        total,
-      },
-      data: result,
-    };
+    return { meta: { page, limit, total }, data: result };
+  }
+
+  async getBlogsWithLockStatus(userId: string, options: IOptions) {
+    const user = await this.userModel.findById(userId);
+    if (!user) throw new HttpException('User not found', 404);
+
+    const { limit, page, skip, sortBy, sortOrder } = paginationHelper(options);
+    const now = new Date();
+
+    // 1. Direct purchased blog ids
+    const payments = await this.paymentModel.find({
+      user: user._id,
+      paymentType: 'blog',
+      status: 'completed',
+    });
+    const purchasedBlogIds = new Set(
+      payments.map((p) => p.blog?.toString()).filter(Boolean),
+    );
+
+    // 2. Expire হওয়া subscriptions বন্ধ করো
+    await this.userSubscriptionModel.updateMany(
+      { user: user._id, isActive: true, expiryDate: { $lt: now } } as any,
+      { $set: { isActive: false } },
+    );
+
+    // 3. Active subscription এর blog ids
+    const activeSubscriptions = await this.userSubscriptionModel.find({
+      user: user._id,
+      isActive: true,
+      expiryDate: { $gt: now },
+    } as any);
+
+    const planIds = activeSubscriptions
+      .map((s) => s.plan?.toString())
+      .filter(Boolean);
+
+    let subscribedBlogIds = new Set<string>();
+    if (planIds.length) {
+      const plans = await this.subscriptionModel.find({
+        _id: { $in: planIds },
+      });
+      subscribedBlogIds = new Set(
+        plans.flatMap((p) => p.blogs.map((b) => b.toString())),
+      );
+    }
+
+    // 4. সব blogs আনো
+    const total = await this.blogModel.countDocuments();
+    const blogs = await this.blogModel
+      .find()
+      .skip(skip)
+      .limit(limit)
+      .sort({ [sortBy]: sortOrder } as any)
+      .populate('author');
+
+    // 5. isLocked status যোগ করো
+    const data = blogs.map((blog) => {
+      const blogId = (blog._id as any).toString();
+      const isOwner = (blog.author as any)?._id?.toString() === userId;
+      const isFree = blog.audienceType === 'free';
+      const isPurchased = purchasedBlogIds.has(blogId);
+      const isSubscribed = subscribedBlogIds.has(blogId);
+
+      const isLocked = !isFree && !isOwner && !isPurchased && !isSubscribed;
+
+      return { ...blog.toObject(), isLocked };
+    });
+
+    return { meta: { page, limit, total }, data };
   }
 }

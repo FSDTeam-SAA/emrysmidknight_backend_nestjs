@@ -9,6 +9,10 @@ import {
   Subscription,
   SubscriptionSchema,
 } from '../subscriber/entities/subscriber.entity';
+import {
+  PaymentMethod,
+  PaymentMethodSchema,
+} from '../payment-method/entities/payment-method.entity';
 
 @Module({
   imports: [
@@ -17,6 +21,7 @@ import {
       { name: Blog.name, schema: BlogSchema },
       { name: User.name, schema: UserSchema },
       { name: Subscription.name, schema: SubscriptionSchema },
+      { name: PaymentMethod.name, schema: PaymentMethodSchema },
     ]),
   ],
   controllers: [PaymentController],

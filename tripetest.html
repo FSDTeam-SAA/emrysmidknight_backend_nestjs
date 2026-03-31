@@ -1,0 +1,1019 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+    <title>Payment Test</title>
+    <script src="https://js.stripe.com/v3/"></script>
+    <style>
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      :root {
+        --bg: #0f0f13;
+        --surface: #1a1a24;
+        --surface2: #12121a;
+        --border: #2d2d3d;
+        --border2: #3d3d55;
+        --text: #e2e8f0;
+        --muted: #94a3b8;
+        --dim: #64748b;
+        --accent: #e8395a;
+        --accent-hv: #c92e4a;
+        --success: #4ade80;
+        --danger: #f87171;
+        --info: #60a5fa;
+        --mono: 'Courier New', monospace;
+      }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 32px 16px 64px;
+      }
+
+      h1 {
+        font-size: 1.5rem;
+        font-weight: 600;
+        margin-bottom: 32px;
+        color: #fff;
+        letter-spacing: -0.02em;
+      }
+
+      /* ── layout ── */
+      .grid {
+        display: grid;
+        grid-template-columns: 340px 1fr;
+        gap: 20px;
+        width: 100%;
+        max-width: 900px;
+      }
+      @media (max-width: 700px) {
+        .grid {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      /* ── card ── */
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 22px;
+      }
+      .card + .card {
+        margin-top: 16px;
+      }
+      .card-title {
+        font-size: 0.78rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--dim);
+        margin-bottom: 14px;
+      }
+
+      /* ── fields ── */
+      label {
+        display: block;
+        font-size: 0.78rem;
+        color: var(--muted);
+        margin-bottom: 5px;
+        margin-top: 12px;
+      }
+      label:first-of-type {
+        margin-top: 0;
+      }
+
+      input,
+      select {
+        width: 100%;
+        background: var(--surface2);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        color: var(--text);
+        padding: 10px 13px;
+        font-size: 0.88rem;
+        outline: none;
+        transition: border-color 0.15s;
+      }
+      input:focus,
+      select:focus {
+        border-color: var(--accent);
+      }
+      input::placeholder {
+        color: var(--border2);
+      }
+      select option {
+        background: var(--surface);
+      }
+      .row2 {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+      }
+
+      /* ── buttons ── */
+      .btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        width: 100%;
+        padding: 12px;
+        margin-top: 14px;
+        background: var(--accent);
+        color: #fff;
+        border: none;
+        border-radius: 10px;
+        font-size: 0.92rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition:
+          background 0.15s,
+          opacity 0.15s;
+      }
+      .btn:hover:not(:disabled) {
+        background: var(--accent-hv);
+      }
+      .btn:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
+      .btn.secondary {
+        background: transparent;
+        border: 1px solid var(--border2);
+        color: var(--muted);
+        margin-top: 8px;
+      }
+      .btn.secondary:hover:not(:disabled) {
+        background: var(--surface2);
+        color: var(--text);
+      }
+
+      /* ── status ── */
+      .status {
+        margin-top: 10px;
+        padding: 10px 13px;
+        border-radius: 9px;
+        font-size: 0.82rem;
+        display: none;
+      }
+      .status.ok {
+        display: block;
+        background: #14532d22;
+        border: 1px solid #16a34a44;
+        color: var(--success);
+      }
+      .status.err {
+        display: block;
+        background: #7f1d1d22;
+        border: 1px solid #dc262244;
+        color: var(--danger);
+      }
+      .status.inf {
+        display: block;
+        background: #1e3a5f22;
+        border: 1px solid #3b82f644;
+        color: var(--info);
+      }
+
+      /* ── log ── */
+      .log {
+        background: var(--surface2);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 12px;
+        font-family: var(--mono);
+        font-size: 0.72rem;
+        max-height: 180px;
+        overflow-y: auto;
+        color: var(--dim);
+        margin-top: 12px;
+      }
+      .log .l {
+        line-height: 1.6;
+      }
+      .log .ok {
+        color: var(--success);
+      }
+      .log .er {
+        color: var(--danger);
+      }
+      .log .in {
+        color: var(--info);
+      }
+
+      /* ── saved methods ── */
+      .method-row {
+        display: flex;
+        align-items: center;
+        gap: 11px;
+        background: var(--surface2);
+        border: 1.5px solid transparent;
+        border-radius: 10px;
+        padding: 11px 13px;
+        cursor: pointer;
+        margin-bottom: 7px;
+        transition:
+          border-color 0.15s,
+          background 0.15s;
+      }
+      .method-row:hover {
+        border-color: var(--border2);
+      }
+      .method-row.active {
+        border-color: var(--accent);
+        background: #1e1025;
+      }
+      .method-row.add-new {
+        border: 1.5px dashed var(--border);
+        color: var(--dim);
+        justify-content: center;
+        gap: 7px;
+        font-size: 0.88rem;
+      }
+      .method-row.add-new:hover {
+        border-color: var(--accent);
+        color: var(--accent);
+      }
+
+      .brand-chip {
+        width: 40px;
+        height: 26px;
+        border-radius: 5px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.65rem;
+        font-weight: 700;
+        flex-shrink: 0;
+        letter-spacing: 0.03em;
+      }
+      .brand-visa {
+        background: #1a1f71;
+        color: #fff;
+      }
+      .brand-mastercard {
+        background: #252525;
+        color: #ff5f00;
+      }
+      .brand-amex {
+        background: #007bc1;
+        color: #fff;
+      }
+      .brand-discover {
+        background: #ff6600;
+        color: #fff;
+      }
+      .brand-stripe {
+        background: #635bff;
+        color: #fff;
+      }
+      .brand-unknown {
+        background: var(--border);
+        color: var(--muted);
+      }
+
+      .card-info {
+        flex: 1;
+      }
+      .card-num {
+        font-size: 0.88rem;
+        font-family: var(--mono);
+        color: var(--text);
+      }
+      .card-exp {
+        font-size: 0.75rem;
+        color: var(--dim);
+        margin-top: 1px;
+      }
+
+      .radio {
+        width: 17px;
+        height: 17px;
+        border-radius: 50%;
+        border: 1.5px solid var(--border2);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+      }
+      .radio.on {
+        border-color: var(--accent);
+      }
+      .radio-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--accent);
+        display: none;
+      }
+      .radio.on .radio-dot {
+        display: block;
+      }
+
+      .no-methods {
+        text-align: center;
+        padding: 20px 0;
+        color: var(--dim);
+        font-size: 0.85rem;
+      }
+
+      /* ── stripe elements ── */
+      .stripe-wrap {
+        background: var(--surface2);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 11px 13px;
+        margin-top: 0;
+        transition: border-color 0.15s;
+      }
+      .stripe-wrap.focus {
+        border-color: var(--accent);
+      }
+
+      /* ── amount bar ── */
+      .amount-bar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 12px 0;
+        border-top: 1px solid var(--border);
+        margin-top: 14px;
+      }
+      .amount-bar span {
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+      .amount-bar strong {
+        font-size: 1.1rem;
+        color: #fff;
+      }
+
+      /* ── split chips ── */
+      .split {
+        display: flex;
+        gap: 10px;
+        margin-top: 8px;
+      }
+      .split-chip {
+        flex: 1;
+        background: var(--surface2);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 7px 10px;
+        text-align: center;
+        font-size: 0.72rem;
+        color: var(--dim);
+      }
+      .split-chip b {
+        display: block;
+        font-size: 0.95rem;
+        font-weight: 600;
+        color: var(--text);
+        margin-top: 2px;
+      }
+
+      /* ── success ── */
+      .success-view {
+        display: none;
+        flex-direction: column;
+        align-items: center;
+        padding: 40px 0;
+        text-align: center;
+      }
+      .success-circle {
+        width: 64px;
+        height: 64px;
+        border-radius: 50%;
+        background: #14532d33;
+        border: 1.5px solid #16a34a66;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 16px;
+      }
+
+      /* ── test cards helper ── */
+      .test-chip {
+        display: inline-block;
+        padding: 4px 9px;
+        margin: 3px;
+        background: var(--surface2);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        font-size: 0.7rem;
+        color: var(--muted);
+        font-family: var(--mono);
+        cursor: pointer;
+        transition:
+          border-color 0.15s,
+          color 0.15s;
+      }
+      .test-chip:hover {
+        border-color: var(--accent);
+        color: var(--accent);
+      }
+      .test-chip.fail {
+        color: var(--danger);
+        border-color: #7f1d1d55;
+      }
+      .test-chip.fail:hover {
+        border-color: var(--danger);
+      }
+
+      .divider {
+        height: 1px;
+        background: var(--border);
+        margin: 4px 0 14px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Stripe Payment Test</h1>
+
+    <div class="grid">
+      <!-- ════ LEFT COLUMN: Config ════ -->
+      <div>
+        <!-- API Config -->
+        <div class="card">
+          <div class="card-title">⚙ API Config</div>
+          <label>API Base URL</label>
+          <input id="apiBase" value="http://localhost:5000/api/v1" />
+          <label>Stripe Publishable Key</label>
+          <input id="stripeKey" placeholder="pk_test_..." />
+          <label>Bearer Token (JWT)</label>
+          <input id="token" placeholder="eyJ..." />
+          <label>Payment Type</label>
+          <select id="payType" onchange="updateLabel()">
+            <option value="unlock-blog">Unlock Blog</option>
+            <option value="subscribe">Subscribe to Plan</option>
+          </select>
+          <label id="resLabel">Blog ID</label>
+          <input id="resourceId" placeholder="MongoDB ObjectId" />
+          <button class="btn" onclick="initStripeAndLoadMethods()">
+            Load Saved Methods
+          </button>
+          <div class="status" id="cfgStatus"></div>
+        </div>
+
+        <!-- Test Cards -->
+        <div class="card">
+          <div class="card-title">🃏 Test Cards</div>
+          <div
+            style="font-size: 0.75rem; color: var(--dim); margin-bottom: 6px"
+          >
+            ✅ Success
+          </div>
+          <div>
+            <span class="test-chip" onclick="hint('4242424242424242', 'Visa')"
+              >4242 4242 4242 4242</span
+            >
+            <span
+              class="test-chip"
+              onclick="hint('5555555555554444', 'Mastercard')"
+              >5555 5555 5555 4444</span
+            >
+            <span
+              class="test-chip"
+              onclick="hint('4000002500003155', '3D Secure')"
+              >4000 0025 0000 3155</span
+            >
+          </div>
+          <div
+            style="font-size: 0.75rem; color: var(--danger); margin: 10px 0 6px"
+          >
+            ❌ Decline
+          </div>
+          <div>
+            <span
+              class="test-chip fail"
+              onclick="hint('4000000000000002', 'Decline')"
+              >4000 0000 0000 0002</span
+            >
+            <span
+              class="test-chip fail"
+              onclick="hint('4000000000009995', 'Insufficient')"
+              >Insufficient Funds</span
+            >
+            <span
+              class="test-chip fail"
+              onclick="hint('4000000000000069', 'Expired')"
+              >Expired Card</span
+            >
+          </div>
+          <div class="log" id="testLog">
+            <div class="l in">Card hints appear here…</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ════ RIGHT COLUMN: Payment ════ -->
+      <div>
+        <div class="card">
+          <!-- Payment view -->
+          <div id="payView">
+            <div
+              style="
+                font-size: 1.1rem;
+                font-weight: 600;
+                color: #fff;
+                margin-bottom: 18px;
+              "
+            >
+              Payment
+            </div>
+
+            <!-- Saved methods -->
+            <div class="card-title">Saved methods</div>
+            <div id="methodsList">
+              <div class="no-methods">Load saved methods first →</div>
+            </div>
+
+            <!-- Add new card toggle -->
+            <div class="divider" style="margin-top: 14px"></div>
+            <div class="card-title">Add new card</div>
+
+            <div
+              class="method-row add-new"
+              id="addNewToggle"
+              onclick="toggleNewCard()"
+            >
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                <rect
+                  x=".5"
+                  y=".5"
+                  width="13"
+                  height="13"
+                  rx="3"
+                  stroke="#64748b"
+                />
+                <path
+                  d="M7 3v8M3 7h8"
+                  stroke="#94a3b8"
+                  stroke-width="1.4"
+                  stroke-linecap="round"
+                />
+              </svg>
+              <span id="addNewLabel">Add New Card</span>
+            </div>
+
+            <div id="newCardForm" style="display: none; margin-top: 10px">
+              <label>Card Number</label>
+              <div class="stripe-wrap" id="wrapNum"><div id="elNum"></div></div>
+              <div class="row2" style="margin-top: 10px">
+                <div>
+                  <label>Expiry</label>
+                  <div class="stripe-wrap" id="wrapExp">
+                    <div id="elExp"></div>
+                  </div>
+                </div>
+                <div>
+                  <label>CVC</label>
+                  <div class="stripe-wrap" id="wrapCvc">
+                    <div id="elCvc"></div>
+                  </div>
+                </div>
+              </div>
+              <label>Name on Card</label>
+              <input
+                id="cardName"
+                placeholder="John Doe"
+                style="font-family: inherit"
+              />
+              <label
+                style="
+                  display: flex;
+                  align-items: center;
+                  gap: 8px;
+                  cursor: pointer;
+                  margin-top: 10px;
+                "
+              >
+                <input
+                  type="checkbox"
+                  id="saveCard"
+                  style="width: auto; accent-color: var(--accent)"
+                />
+                Save card for future purchases
+              </label>
+            </div>
+
+            <div class="amount-bar">
+              <span>Total Amount</span>
+              <strong id="dispAmt">—</strong>
+            </div>
+            <div class="split" id="splitRow" style="display: none">
+              <div class="split-chip">Admin 10%<b id="adminAmt">—</b></div>
+              <div class="split-chip">Author 90%<b id="authorAmt">—</b></div>
+            </div>
+
+            <button class="btn secondary" style="margin-bottom: 12px; border-color: var(--accent); color: var(--text);" onclick="createIntent()">
+              Fetch Amount
+            </button>
+
+            <button class="btn" id="payBtn" disabled onclick="pay()">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <rect
+                  x="1"
+                  y="4"
+                  width="14"
+                  height="9"
+                  rx="2"
+                  stroke="#fff"
+                  stroke-width="1.2"
+                />
+                <path d="M1 7h14" stroke="#fff" stroke-width="1.2" />
+                <rect x="3" y="9" width="3" height="1.5" rx=".5" fill="#fff" />
+              </svg>
+              Pay Now
+            </button>
+            <div class="status" id="payStatus"></div>
+            <p
+              style="
+                text-align: center;
+                font-size: 0.72rem;
+                color: var(--dim);
+                margin-top: 8px;
+              "
+            >
+              🔒 Encrypted &amp; secure
+            </p>
+          </div>
+
+          <!-- Success view -->
+          <div class="success-view" id="successView">
+            <div class="success-circle">
+              <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+                <path
+                  d="M7 14l5 5 9-9"
+                  stroke="#4ade80"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </div>
+            <div
+              style="
+                font-size: 1.1rem;
+                font-weight: 600;
+                color: #fff;
+                margin-bottom: 6px;
+              "
+            >
+              Payment Successful
+            </div>
+            <div
+              id="successMsg"
+              style="font-size: 0.85rem; color: var(--dim)"
+            ></div>
+            <button
+              class="btn"
+              style="
+                max-width: 160px;
+                margin-top: 20px;
+                background: #1a2e1a;
+                border: 1px solid #16a34a55;
+                color: var(--success);
+              "
+              onclick="resetView()"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+
+        <!-- Log -->
+        <div class="card">
+          <div class="card-title">📋 Request Log</div>
+          <div class="log" id="mainLog"><div class="l in">Waiting…</div></div>
+          <button class="btn secondary" onclick="clearLog()">Clear log</button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // ── state ──
+      let stripe        = null;
+      let elNum         = null;
+      let elExp         = null;
+      let elCvc         = null;
+      let clientSecret  = null;
+      let selectedId    = null;   // 'new' | MongoDB _id of PaymentMethod
+      let newCardOpen   = false;
+      let amount        = 0;
+
+      // ── log helpers ──
+      function log(msg, cls='in', targetId='mainLog'){
+        const p = document.getElementById(targetId);
+        const d = document.createElement('div');
+        d.className = `l ${cls}`;
+        d.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+        p.appendChild(d);
+        p.scrollTop = p.scrollHeight;
+      }
+      function clearLog(){ document.getElementById('mainLog').innerHTML = ''; }
+
+      function setStatus(id, msg, cls){
+        const el = document.getElementById(id);
+        el.textContent = msg;
+        el.className = `status ${cls}`;
+      }
+
+      // ── label ──
+      function updateLabel(){
+        document.getElementById('resLabel').textContent =
+          document.getElementById('payType').value === 'unlock-blog' ? 'Blog ID' : 'Plan ID';
+      }
+
+      // ── test card hint ──
+      function hint(num, label){
+        log(`Use card: ${num.replace(/(.{4})/g,'$1 ').trim()} — ${label}`, 'in', 'testLog');
+      }
+
+      // ── init Stripe Elements ──
+      function mountElements(){
+        if(elNum) return; // already mounted
+        const elements = stripe.elements({
+          appearance:{
+            theme:'night',
+            variables:{
+              colorPrimary:'#e8395a',
+              colorBackground:'#12121a',
+              colorText:'#e2e8f0',
+              colorDanger:'#f87171',
+              fontFamily:'system-ui,sans-serif',
+              borderRadius:'8px',
+            }
+          }
+        });
+        elNum = elements.create('cardNumber');
+        elExp = elements.create('cardExpiry');
+        elCvc = elements.create('cardCvc');
+        elNum.mount('#elNum'); elExp.mount('#elExp'); elCvc.mount('#elCvc');
+
+        [[elNum,'wrapNum'],[elExp,'wrapExp'],[elCvc,'wrapCvc']].forEach(([el,wId])=>{
+          el.on('focus',()=>document.getElementById(wId).classList.add('focus'));
+          el.on('blur', ()=>document.getElementById(wId).classList.remove('focus'));
+        });
+        log('Stripe Elements mounted','ok');
+      }
+
+      // ── init Stripe + load saved methods ──
+      async function initStripeAndLoadMethods(){
+        const key   = document.getElementById('stripeKey').value.trim();
+        const token = document.getElementById('token').value.trim();
+        const base  = document.getElementById('apiBase').value.trim();
+
+        if(!key.startsWith('pk_')){
+          setStatus('cfgStatus','❌ Enter a valid Stripe publishable key','err'); return;
+        }
+        if(!token){
+          setStatus('cfgStatus','❌ Bearer token required','err'); return;
+        }
+
+        if(!stripe){
+          stripe = Stripe(key);
+          log('Stripe initialised','ok');
+        }
+
+        // Fetch saved payment methods
+        log(`GET ${base}/payment-method`);
+        try{
+          const res = await fetch(`${base}/payment-method`,{
+            headers:{ Authorization:`Bearer ${token}` }
+          });
+          const body = await res.json();
+          if(!res.ok) throw new Error(body.message ?? res.statusText);
+
+          const methods = body.data ?? [];
+          log(`Loaded ${methods.length} saved method(s)`,'ok');
+          renderMethods(methods);
+          setStatus('cfgStatus',`✅ Loaded ${methods.length} saved card(s)`,'ok');
+
+          // mount elements for adding new card
+          mountElements();
+        } catch(err){
+          log(`Error: ${err.message}`,'er');
+          setStatus('cfgStatus',`❌ ${err.message}`,'err');
+        }
+      }
+
+      // ── render saved method rows ──
+      function renderMethods(methods){
+        const list = document.getElementById('methodsList');
+        list.innerHTML = '';
+
+        if(!methods.length){
+          list.innerHTML = '<div class="no-methods">No saved cards yet</div>';
+          return;
+        }
+
+        methods.forEach(m => {
+          const brandClass = `brand-${(m.cardBrand||'unknown').toLowerCase()}`;
+          const brandLabel = (m.cardBrand||'?').toUpperCase().slice(0,4);
+          const expStr     = `${String(m.expiryMonth).padStart(2,'0')}/${String(m.expiryYear).slice(-2)}`;
+
+          const row = document.createElement('div');
+          row.className = 'method-row';
+          row.dataset.id = m._id;
+          row.innerHTML = `
+            <div class="brand-chip ${brandClass}">${brandLabel}</div>
+            <div class="card-info">
+              <div class="card-num">·············${m.cardLast4}</div>
+              <div class="card-exp">Expires ${expStr}</div>
+            </div>
+            <div class="radio" id="radio-${m._id}"><div class="radio-dot"></div></div>
+          `;
+          row.onclick = () => selectMethod(m._id, row);
+          list.appendChild(row);
+        });
+
+        // auto-select first
+        const first = list.querySelector('.method-row');
+        if(first) first.click();
+      }
+
+      // ── select saved method ──
+      function selectMethod(id, row){
+        document.querySelectorAll('.method-row:not(.add-new)').forEach(r=>r.classList.remove('active'));
+        document.querySelectorAll('[id^="radio-"]').forEach(r=>r.classList.remove('on'));
+        row.classList.add('active');
+        document.getElementById(`radio-${id}`)?.classList.add('on');
+        selectedId = id;
+        if(newCardOpen) closeNewCard();
+        updatePayBtn();
+      }
+
+      // ── toggle new card form ──
+      function toggleNewCard(){
+        newCardOpen ? closeNewCard() : openNewCard();
+      }
+      function openNewCard(){
+        newCardOpen = true;
+        selectedId  = 'new';
+        document.querySelectorAll('.method-row:not(.add-new)').forEach(r=>r.classList.remove('active'));
+        document.querySelectorAll('[id^="radio-"]').forEach(r=>r.classList.remove('on'));
+        document.getElementById('addNewToggle').classList.add('active');
+        document.getElementById('addNewLabel').textContent = 'New Card (fill below)';
+        document.getElementById('newCardForm').style.display = 'block';
+        updatePayBtn();
+      }
+      function closeNewCard(){
+        newCardOpen = false;
+        document.getElementById('addNewToggle').classList.remove('active');
+        document.getElementById('addNewLabel').textContent = 'Add New Card';
+        document.getElementById('newCardForm').style.display = 'none';
+      }
+
+      // ── enable pay button when we have a selection ──
+      function updatePayBtn(){
+        const btn = document.getElementById('payBtn');
+        btn.disabled = !selectedId;
+      }
+
+      // ── Step 1: create PaymentIntent ──
+      async function createIntent(){
+        const base  = document.getElementById('apiBase').value.trim();
+        const token = document.getElementById('token').value.trim();
+        const type  = document.getElementById('payType').value;
+        const resId = document.getElementById('resourceId').value.trim();
+
+        if(!token){ setStatus('payStatus','❌ Bearer token required','err'); return false; }
+        if(!resId){ setStatus('payStatus','❌ Resource ID required','err'); return false; }
+        if(!stripe){ setStatus('payStatus','❌ Load saved methods first','err'); return false; }
+
+        const endpoint = `${base}/payment/${type}/${resId}`;
+        const body = {};
+        if(selectedId && selectedId !== 'new') body.savedMethodId = selectedId;
+
+        log(`POST ${endpoint}${body.savedMethodId ? ` (savedMethodId: ${body.savedMethodId})` : ''}`);
+
+        const res  = await fetch(endpoint, {
+          method:'POST',
+          headers:{ 'Content-Type':'application/json', Authorization:`Bearer ${token}` },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        if(!res.ok) throw new Error(data.message ?? res.statusText);
+
+        clientSecret = data.data?.clientSecret;
+        amount       = data.data?.amount ?? 0;
+        const admin  = data.data?.adminAmount;
+        const author = data.data?.authorAmount;
+
+        log(`PaymentIntent: ${data.data?.paymentIntentId}`,'ok');
+        log(`Amount $${amount}  Admin $${admin}  Author $${author}`,'in');
+
+        document.getElementById('dispAmt').textContent = `$${amount.toFixed(2)}`;
+        if(admin != null){
+          document.getElementById('adminAmt').textContent  = `$${admin.toFixed(2)}`;
+          document.getElementById('authorAmt').textContent = `$${author.toFixed(2)}`;
+          document.getElementById('splitRow').style.display = 'flex';
+        }
+        document.getElementById('payBtn').textContent = `Pay $${amount.toFixed(2)}`;
+        document.getElementById('payBtn').disabled = false; // explicitly enable
+        return true;
+      }
+
+      // ── pay button handler ──
+      async function pay(){
+        const btn = document.getElementById('payBtn');
+        btn.disabled = true;
+        btn.textContent = 'Processing…';
+        setStatus('payStatus','Creating payment intent…','inf');
+
+        try{
+          // Always create/refresh intent on pay click
+          const ok = await createIntent();
+          if(!ok){ btn.disabled=false; btn.textContent=`Pay $${amount.toFixed(2)}`; return; }
+
+          setStatus('payStatus','Confirming payment…','inf');
+
+          let result;
+
+          if(selectedId === 'new'){
+            // Confirm with Stripe Elements (new card)
+            const name = document.getElementById('cardName').value.trim() || 'Card Holder';
+            result = await stripe.confirmCardPayment(clientSecret, {
+              payment_method:{ card: elNum, billing_details:{ name } }
+            });
+
+            // Optionally save card if checkbox checked
+            if(!result.error && document.getElementById('saveCard').checked && result.paymentIntent?.payment_method){
+              await savePaymentMethod(result.paymentIntent.payment_method);
+            }
+          } else {
+            // Confirm with saved payment method id (Stripe pm_xxx)
+            // We need the Stripe pm_xxx from our saved record
+            // The backend already attached it to the PI via piParams.payment_method
+            // So we just confirm without passing payment_method again
+            result = await stripe.confirmCardPayment(clientSecret);
+          }
+
+          if(result.error){
+            log(`Stripe error: ${result.error.message}`,'er');
+            setStatus('payStatus',`❌ ${result.error.message}`,'err');
+            btn.disabled = false;
+            btn.textContent = `Pay $${amount.toFixed(2)}`;
+            return;
+          }
+
+          if(result.paymentIntent?.status === 'succeeded'){
+            log(`✅ PAYMENT SUCCEEDED — ${result.paymentIntent.id}`,'ok');
+            document.getElementById('payView').style.display   = 'none';
+            document.getElementById('successView').style.display = 'flex';
+            document.getElementById('successMsg').textContent =
+              `$${amount.toFixed(2)} processed · PI: ${result.paymentIntent.id}`;
+            clientSecret = null;
+          } else {
+            setStatus('payStatus',`⚠ Status: ${result.paymentIntent?.status}`,'inf');
+            btn.disabled = false;
+            btn.textContent = `Pay $${amount.toFixed(2)}`;
+          }
+        } catch(err){
+          log(`Error: ${err.message}`,'er');
+          setStatus('payStatus',`❌ ${err.message}`,'err');
+          btn.disabled = false;
+          btn.textContent = `Pay $${amount.toFixed(2)}`;
+        }
+      }
+
+      // ── save card after successful payment ──
+      async function savePaymentMethod(pmId){
+        const base  = document.getElementById('apiBase').value.trim();
+        const token = document.getElementById('token').value.trim();
+        try{
+          const res = await fetch(`${base}/payment-method`,{
+            method:'POST',
+            headers:{ 'Content-Type':'application/json', Authorization:`Bearer ${token}` },
+            body: JSON.stringify({ paymentMethodId: pmId }),
+          });
+          if(res.ok) log('Card saved for future use','ok');
+          else log('Could not save card (non-critical)','in');
+        } catch{ log('Could not save card (non-critical)','in'); }
+      }
+
+      // ── reset view ──
+      function resetView(){
+        document.getElementById('payView').style.display    = 'block';
+        document.getElementById('successView').style.display = 'none';
+        document.getElementById('payBtn').disabled = true;
+        document.getElementById('payBtn').textContent = 'Pay Now';
+        document.getElementById('payStatus').className = 'status';
+        clientSecret = null;
+      }
+    </script>
+  </body>
+</html>

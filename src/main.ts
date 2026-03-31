@@ -39,6 +39,7 @@ async function bootstrap() {
     .setTitle('Emrysmidknight API')
     .setDescription('Emrysmidknight API Documentation')
     .setVersion('1.0')
+    // .addServer('/api/v1')
     .addTag('Emrysmidknight')
     .addBearerAuth(
       {
@@ -54,9 +55,11 @@ async function bootstrap() {
     .build();
 
   const document = SwaggerModule.createDocument(app, swaggerConfig);
-  SwaggerModule.setup('api/docs', app, document, {
+  SwaggerModule.setup('docs', app, document, {
+    useGlobalPrefix: true,
     swaggerOptions: {
       persistAuthorization: true,
+      docExpansion: 'none',
     },
   });
 
@@ -65,7 +68,7 @@ async function bootstrap() {
       `Server is running on port http://localhost:${process.env.PORT ?? 3000}`,
     );
     console.log(
-      `Swagger URL: http://localhost:${process.env.PORT ?? 3000}/api/docs`,
+      `Swagger URL: http://localhost:${process.env.PORT ?? 3000}/api/v1/docs`,
     );
   });
 }

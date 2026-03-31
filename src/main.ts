@@ -57,10 +57,7 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, swaggerConfig);
   SwaggerModule.setup('docs', app, document, {
     useGlobalPrefix: true,
-    swaggerOptions: {
-      persistAuthorization: true,
-      docExpansion: 'none',
-    },
+    swaggerOptions: { persistAuthorization: true },
   });
 
   await app.listen(process.env.PORT ?? 3000, () => {

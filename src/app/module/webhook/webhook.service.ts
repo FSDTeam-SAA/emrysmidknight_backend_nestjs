@@ -1,7 +1,4 @@
-
 import { Injectable, Logger } from '@nestjs/common';
-import { CreateWebhookDto } from './dto/create-webhook.dto';
-import { UpdateWebhookDto } from './dto/update-webhook.dto';
 import Stripe from 'stripe';
 import config from 'src/app/config';
 import { InjectModel } from '@nestjs/mongoose';
@@ -28,15 +25,11 @@ export class WebhookService {
 
   constructor(
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
-
     @InjectModel(Blog.name) private readonly blogModel: Model<BlogDocument>,
-
     @InjectModel(Payment.name)
     private readonly paymentModel: Model<PaymentDocument>,
-
     @InjectModel(Subscription.name)
     private readonly subscriptionModel: Model<SubscriptionDocument>,
-
     @InjectModel(UserSubscription.name)
     private readonly userSubscriptionModel: Model<UserSubscriptionDocument>,
     private readonly notificationService: NotificationService,
@@ -57,12 +50,12 @@ export class WebhookService {
 
     try {
       switch (event.type) {
-        case 'checkout.session.completed':
-          await this.handleCheckoutCompleted(event, res);
+        case 'payment_intent.succeeded':
+          await this.handlePaymentIntentSucceeded(event, res);
           break;
 
         case 'payment_intent.payment_failed':
-          await this.handlePaymentFailed(event, res);
+          await this.handlePaymentIntentFailed(event, res);
           break;
 
         default:
@@ -75,50 +68,47 @@ export class WebhookService {
     }
   }
 
-  // ===============================
-  // CHECKOUT COMPLETED
-  // ===============================
-  private async handleCheckoutCompleted(event: Stripe.Event, res: Response) {
-    const session = event.data.object as Stripe.Checkout.Session;
+  // ─────────────────────────────────────────────
+  // payment_intent.succeeded
+  // ─────────────────────────────────────────────
+  private async handlePaymentIntentSucceeded(
+    event: Stripe.Event,
+    res: Response,
+  ) {
+    const intent = event.data.object as Stripe.PaymentIntent;
 
     const payment = await this.paymentModel.findOne({
-      stripeSessionId: session.id,
+      stripePaymentIntentId: intent.id,
     });
     if (!payment) return res.json({ received: true });
 
-    payment.paymentType = session.metadata?.paymentType ?? payment.paymentType;
     payment.status = 'completed';
-    payment.stripePaymentIntentId = session.payment_intent as string;
     await payment.save();
 
     const user = await this.userModel.findById(payment.user);
     if (!user) return res.json({ received: true });
 
-    const paymentType = session.metadata?.paymentType ?? payment.paymentType;
+    const paymentType = intent.metadata?.paymentType ?? payment.paymentType;
 
     if (paymentType === 'blog') {
-      await this.handleUnlockCompleted(session, payment, user, res);
+      return this.handleBlogUnlockCompleted(intent, payment, user, res);
     } else if (paymentType === 'subscription') {
-      await this.handleSubscriptionCompleted(session, payment, user, res);
-    } else {
-      this.logger.warn(
-        `Unknown payment type for session ${session.id}: ${paymentType}`,
-      );
-      return res.json({ received: true });
+      return this.handleSubscriptionCompleted(intent, payment, user, res);
     }
+
+    return res.json({ received: true });
   }
 
-  // ===============================
-  // BLOG UNLOCK COMPLETED
-  // ===============================
-
-  private async handleUnlockCompleted(
-    session: Stripe.Checkout.Session,
+  // ─────────────────────────────────────────────
+  // Blog unlock completed
+  // ─────────────────────────────────────────────
+  private async handleBlogUnlockCompleted(
+    intent: Stripe.PaymentIntent,
     payment: PaymentDocument,
     user: UserDocument,
     res: Response,
   ) {
-    const blogId = payment.blog?.toString() ?? session.metadata?.blogId;
+    const blogId = payment.blog?.toString() ?? intent.metadata?.blogId;
     if (!blogId) return res.json({ received: true });
 
     const blog = await this.blogModel.findById(blogId);
@@ -126,23 +116,13 @@ export class WebhookService {
 
     payment.blog = blog._id as any;
     payment.paymentType = 'blog';
-
-    if (!payment.amount) {
-      payment.amount = Number(session.metadata?.price ?? blog.price ?? 0);
-    }
-
-    const adminAmount =
-      payment.adminAmount ??
-      Number((Number(payment.amount ?? blog.price ?? 0) * 0.1).toFixed(2));
-    const authorAmount =
+    payment.amount =
+      payment.amount ?? Number(intent.metadata?.price ?? blog.price ?? 0);
+    payment.adminAmount =
+      payment.adminAmount ?? Number((Number(payment.amount) * 0.1).toFixed(2));
+    payment.authorAmount =
       payment.authorAmount ??
-      Number(
-        (Number(payment.amount ?? blog.price ?? 0) - adminAmount).toFixed(2),
-      );
-
-    payment.adminAmount = adminAmount;
-    payment.authorAmount = authorAmount;
-
+      Number((Number(payment.amount) - Number(payment.adminAmount)).toFixed(2));
     await payment.save();
 
     await this.notificationService.sendNotification({
@@ -160,13 +140,16 @@ export class WebhookService {
     });
   }
 
+  // ─────────────────────────────────────────────
+  // Subscription completed
+  // ─────────────────────────────────────────────
   private async handleSubscriptionCompleted(
-    session: Stripe.Checkout.Session,
+    intent: Stripe.PaymentIntent,
     payment: PaymentDocument,
     user: UserDocument,
     res: Response,
   ) {
-    const planId = payment.plan?.toString() ?? session.metadata?.planId;
+    const planId = payment.plan?.toString() ?? intent.metadata?.planId;
     if (!planId) return res.json({ received: true });
 
     const plan = await this.subscriptionModel.findById(planId);
@@ -174,16 +157,16 @@ export class WebhookService {
 
     payment.plan = plan._id as any;
     payment.paymentType = 'subscription';
-    payment.amount = Number(
-      session.metadata?.price ?? payment.amount ?? plan.price,
-    );
+    payment.amount =
+      payment.amount ?? Number(intent.metadata?.price ?? plan.price);
     payment.adminAmount =
       payment.adminAmount ?? Number((Number(payment.amount) * 0.1).toFixed(2));
     payment.authorAmount =
       payment.authorAmount ??
-      Number((Number(payment.amount) - payment.adminAmount).toFixed(2));
+      Number((Number(payment.amount) - Number(payment.adminAmount)).toFixed(2));
     await payment.save();
 
+    // Calculate expiry
     const expiryDate = new Date();
     if (plan.duration === 'yearly') {
       expiryDate.setFullYear(expiryDate.getFullYear() + 1);
@@ -192,21 +175,14 @@ export class WebhookService {
     }
 
     await this.userSubscriptionModel.findOneAndUpdate(
-      {
-        user: user._id,
-        plan: plan._id,
-      } as any,
+      { user: user._id, plan: plan._id } as any,
       {
         user: user._id,
         plan: plan._id,
         expiryDate,
         isActive: true,
       } as any,
-      {
-        upsert: true,
-        new: true,
-        setDefaultsOnInsert: true,
-      },
+      { upsert: true, new: true, setDefaultsOnInsert: true },
     );
 
     await this.notificationService.sendNotification({
@@ -223,43 +199,10 @@ export class WebhookService {
     });
   }
 
-  // ===============================
-  // SUBSCRIPTION LOGIC
-  // ===============================
-  // private async handleSubscriptionPayment(
-  //   session: Stripe.Checkout.Session,
-  //   payment: PaymentDocument,
-  //   user: UserDocument,
-  //   res: Response,
-  // ) {
-  //   const subscriber = await this.subscriberModel.findById(payment.subscriber);
-  //   if (!subscriber) return res.json({ received: true });
-
-  //   // Add user to subscriber's users array if not already present
-  //   const alreadyAdded = subscriber.users?.some((id) => id.equals(user._id));
-  //   if (!alreadyAdded) {
-  //     subscriber.users = subscriber.users ?? [];
-  //     subscriber.users.push(user._id);
-  //     await subscriber.save();
-  //   }
-
-  //   // Calculate expiry using `days` from metadata
-  //   const days = parseInt(session.metadata?.days ?? '0', 10);
-  //   const expireDate = new Date();
-  //   expireDate.setDate(expireDate.getDate() + days);
-
-  //   user.isSubscribed = true;
-  //   user.subscribers = subscriber._id;
-  //   user.subscriptionEndDate = expireDate;
-  //   await user.save();
-
-  //   return res.json({ received: true });
-  // }
-
-  // ===============================
-  // PAYMENT FAILED
-  // ===============================
-  private async handlePaymentFailed(event: Stripe.Event, res: Response) {
+  // ─────────────────────────────────────────────
+  // payment_intent.payment_failed
+  // ─────────────────────────────────────────────
+  private async handlePaymentIntentFailed(event: Stripe.Event, res: Response) {
     const intent = event.data.object as Stripe.PaymentIntent;
 
     const payment = await this.paymentModel.findOne({

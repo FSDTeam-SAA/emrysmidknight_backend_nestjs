@@ -1,24 +1,27 @@
 import { HttpException, Injectable } from '@nestjs/common';
-import { CreatePaymentDto } from './dto/create-payment.dto';
-import { UpdatePaymentDto } from './dto/update-payment.dto';
 import { InjectModel } from '@nestjs/mongoose';
 import { Payment, PaymentDocument } from './entities/payment.entity';
 import { Model } from 'mongoose';
 import { User, UserDocument } from '../user/entities/user.entity';
 import { Blog, BlogDocument } from '../blog/entities/blog.entity';
-import Stripe from 'stripe';
-import config from 'src/app/config';
 import {
   Subscription,
   SubscriptionDocument,
 } from '../subscriber/entities/subscriber.entity';
+import {
+  PaymentMethod,
+  PaymentMethodDocument,
+} from '../payment-method/entities/payment-method.entity';
+import Stripe from 'stripe';
+import config from 'src/app/config';
 import { IFilterParams } from 'src/app/helpers/pick';
 import paginationHelper, { IOptions } from 'src/app/helpers/pagenation';
 import buildWhereConditions from 'src/app/helpers/buildWhereConditions';
 
 @Injectable()
 export class PaymentService {
-  private stripe: Stripe;
+  private readonly stripe: Stripe;
+
   constructor(
     @InjectModel(Payment.name)
     private readonly paymentModel: Model<PaymentDocument>,
@@ -28,46 +31,123 @@ export class PaymentService {
     private readonly blogModel: Model<BlogDocument>,
     @InjectModel(Subscription.name)
     private readonly subscriptionModel: Model<SubscriptionDocument>,
+    @InjectModel(PaymentMethod.name)
+    private readonly paymentMethodModel: Model<PaymentMethodDocument>,
   ) {
     this.stripe = new Stripe(config.stripe.secretKey!);
   }
 
-  private buildCheckoutResponse(
-    session: Stripe.Checkout.Session,
+  private getTestCardToken(cardNumber: string) {
+    const normalized = cardNumber.replace(/\s+/g, '');
+
+    const tokenMap: Record<string, string> = {
+      '4242424242424242': 'tok_visa',
+      '5555555555554444': 'tok_mastercard',
+      '4000000000003220': 'tok_visa_debit',
+      '378282246310005': 'tok_amex',
+      '6011111111111117': 'tok_discover',
+    };
+
+    return tokenMap[normalized];
+  }
+
+  private async ensureStripeCustomer(user: UserDocument) {
+    if (user.stripeCustomerId) return user.stripeCustomerId;
+
+    const customer = await this.stripe.customers.create({
+      email: user.email,
+      name: user.fullName,
+      metadata: { userId: user._id.toString() },
+    });
+
+    user.stripeCustomerId = customer.id;
+    await user.save();
+
+    return customer.id;
+  }
+
+  private buildPaymentIntentResponse(
+    paymentIntent: Stripe.PaymentIntent,
     amount: number,
     adminAmount: number,
     authorAmount: number,
   ) {
     return {
-      sessionId: session.id,
-      url: session.url,
+      clientSecret: paymentIntent.client_secret,
+      paymentIntentId: paymentIntent.id,
+      status: paymentIntent.status,
       amount,
       adminAmount,
       authorAmount,
     };
   }
 
-  async unlockBlog(userId: string, blogId: string) {
-    const user = await this.userModel.findById(userId);
+  private async confirmPaymentIntentIfPossible(
+    paymentIntentId: string,
+    stripePaymentMethodId: string,
+  ) {
+    return this.stripe.paymentIntents.confirm(paymentIntentId, {
+      payment_method: stripePaymentMethodId,
+    });
+  }
 
-    if (!user) throw new HttpException('user is not found', 404);
+  private async resolveStripePaymentMethodId(
+    user: UserDocument,
+    savedMethodId?: string,
+  ): Promise<string | undefined> {
+    if (!savedMethodId) return undefined;
+
+    const saved = await this.paymentMethodModel.findOne({
+      _id: savedMethodId,
+      userId: user._id,
+    });
+    if (!saved) throw new HttpException('Saved payment method not found', 404);
+
+    const token = this.getTestCardToken(saved.cardNumber);
+    if (!token) {
+      throw new HttpException(
+        'This saved card cannot be used for Stripe test payment',
+        400,
+      );
+    }
+
+    const stripeCustomerId = await this.ensureStripeCustomer(user);
+    const paymentMethod = await this.stripe.paymentMethods.create({
+      type: 'card',
+      card: { token },
+      billing_details: {
+        name: saved.cardHolderName ?? user.fullName,
+      },
+    });
+
+    await this.stripe.paymentMethods.attach(paymentMethod.id, {
+      customer: stripeCustomerId,
+    });
+
+    await this.stripe.customers.update(stripeCustomerId, {
+      invoice_settings: {
+        default_payment_method: paymentMethod.id,
+      },
+    });
+
+    return paymentMethod.id;
+  }
+
+  async unlockBlog(userId: string, blogId: string, savedMethodId?: string) {
+    const user = await this.userModel.findById(userId);
+    if (!user) throw new HttpException('User not found', 404);
 
     const blog = await this.blogModel.findById(blogId);
-
-    if (!blog) throw new HttpException('Blog is not found', 404);
+    if (!blog) throw new HttpException('Blog not found', 404);
 
     const author = await this.userModel.findById(blog.author);
-    if (!author) {
-      throw new HttpException('Blog author not found', 404);
-    }
+    if (!author) throw new HttpException('Blog author not found', 404);
 
-    if (blog.audienceType !== 'paid' || blog.price <= 0) {
+    if (blog.audienceType !== 'paid' || blog.price <= 0)
       throw new HttpException('This blog does not require payment', 400);
-    }
 
-    if (blog.author.toString() === user._id.toString()) {
+    if (blog.author.toString() === user._id.toString())
       throw new HttpException('You cannot unlock your own blog', 400);
-    }
 
     if (!author.stripeAccountId) {
       throw new HttpException(
@@ -76,38 +156,61 @@ export class PaymentService {
       );
     }
 
-    const existingCompletedPayment = await this.paymentModel.findOne({
+    const existingCompleted = await this.paymentModel.findOne({
       user: user._id,
       blog: blog._id,
       paymentType: 'blog',
       status: 'completed',
     });
-
-    if (existingCompletedPayment) {
+    if (existingCompleted)
       throw new HttpException('Blog already unlocked', 400);
-    }
 
-    const existingPendingPayment = await this.paymentModel.findOne({
+    const stripePaymentMethodId = await this.resolveStripePaymentMethodId(
+      user,
+      savedMethodId,
+    );
+
+    const existingPending = await this.paymentModel.findOne({
       user: user._id,
       blog: blog._id,
       paymentType: 'blog',
       status: 'pending',
     });
 
-    if (existingPendingPayment?.stripeSessionId) {
-      const existingSession = await this.stripe.checkout.sessions.retrieve(
-        existingPendingPayment.stripeSessionId,
+    if (existingPending?.stripePaymentIntentId) {
+      const pi = await this.stripe.paymentIntents.retrieve(
+        existingPending.stripePaymentIntentId,
       );
+      if (pi.status !== 'succeeded' && pi.status !== 'canceled') {
+        let latestPi = pi;
 
-      if (
-        existingSession.status === 'open' &&
-        existingSession.url
-      ) {
-        return this.buildCheckoutResponse(
-          existingSession,
+        if (stripePaymentMethodId && pi.payment_method !== stripePaymentMethodId) {
+          const updateParams: Stripe.PaymentIntentUpdateParams = {
+            payment_method: stripePaymentMethodId,
+          };
+          if (!pi.customer && user.stripeCustomerId) {
+            updateParams.customer = user.stripeCustomerId;
+          }
+          latestPi = await this.stripe.paymentIntents.update(pi.id, updateParams);
+        }
+
+        if (
+          stripePaymentMethodId &&
+          ['requires_payment_method', 'requires_confirmation'].includes(
+            latestPi.status,
+          )
+        ) {
+          latestPi = await this.confirmPaymentIntentIfPossible(
+            latestPi.id,
+            stripePaymentMethodId,
+          );
+        }
+
+        return this.buildPaymentIntentResponse(
+          latestPi,
           blog.price,
-          existingPendingPayment.adminAmount,
-          existingPendingPayment.authorAmount,
+          existingPending.adminAmount,
+          existingPending.authorAmount,
         );
       }
     }
@@ -117,85 +220,78 @@ export class PaymentService {
     const totalAmountInCents = Math.round(blog.price * 100);
     const adminAmountInCents = Math.round(adminAmount * 100);
 
-    const session = await this.stripe.checkout.sessions.create({
-      mode: 'payment',
+    const piParams: Stripe.PaymentIntentCreateParams = {
+      amount: totalAmountInCents,
+      currency: 'usd',
       payment_method_types: ['card'],
-      line_items: [
-        {
-          price_data: {
-            currency: 'usd',
-            product_data: {
-              name: blog.title,
-              description: blog.content,
-            },
-            unit_amount: totalAmountInCents,
-          },
-          quantity: 1,
-        },
-      ],
-      payment_intent_data: {
-        application_fee_amount: adminAmountInCents,
-        transfer_data: {
-          destination: author.stripeAccountId,
-        },
-      },
-      customer_email: user.email,
-      success_url: `${config.frontendUrl}/payment/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${config.frontendUrl}/payment/cancel`,
+      receipt_email: user.email,
+      application_fee_amount: adminAmountInCents,
+      transfer_data: { destination: author.stripeAccountId },
       metadata: {
         userId: user._id.toString(),
         blogId: blog._id.toString(),
         authorId: author._id.toString(),
-        authorStripeAccountId: author.stripeAccountId,
         paymentType: 'blog',
         price: blog.price.toString(),
         adminAmount: adminAmount.toString(),
         authorAmount: authorAmount.toString(),
       },
-    } as Stripe.Checkout.SessionCreateParams);
+    };
 
-    if (existingPendingPayment) {
-      existingPendingPayment.stripeSessionId = session.id;
-      existingPendingPayment.amount = blog.price;
-      existingPendingPayment.authorAmount = authorAmount;
-      existingPendingPayment.adminAmount = adminAmount;
-      existingPendingPayment.paymentType = 'blog';
-      await existingPendingPayment.save();
+    if (user.stripeCustomerId) {
+      piParams.customer = user.stripeCustomerId;
+    }
+
+    if (stripePaymentMethodId) {
+      piParams.payment_method = stripePaymentMethodId;
+      piParams.confirm = true;
+    }
+
+    const paymentIntent = await this.stripe.paymentIntents.create(piParams);
+
+    if (existingPending) {
+      existingPending.stripePaymentIntentId = paymentIntent.id;
+      existingPending.amount = blog.price;
+      existingPending.adminAmount = adminAmount;
+      existingPending.authorAmount = authorAmount;
+      await existingPending.save();
     } else {
       await this.paymentModel.create({
         user: user._id,
         blog: blog._id,
-        stripeSessionId: session.id,
+        stripePaymentIntentId: paymentIntent.id,
         amount: blog.price,
-        authorAmount,
         adminAmount,
+        authorAmount,
         paymentType: 'blog',
+        status: 'pending',
       });
     }
 
-    return this.buildCheckoutResponse(
-      session,
+    return this.buildPaymentIntentResponse(
+      paymentIntent,
       blog.price,
       adminAmount,
       authorAmount,
     );
   }
 
-  async subscribeToPlan(userId: string, planId: string) {
+  async subscribeToPlan(
+    userId: string,
+    planId: string,
+    savedMethodId?: string,
+  ) {
     const user = await this.userModel.findById(userId);
-    if (!user) throw new HttpException('user is not found', 404);
+    if (!user) throw new HttpException('User not found', 404);
 
     const plan = await this.subscriptionModel.findById(planId);
     if (!plan) throw new HttpException('Subscription plan not found', 404);
 
     const author = await this.userModel.findById(plan.author);
-    if (!author) {
-      throw new HttpException('Subscription author not found', 404);
-    }
+    if (!author) throw new HttpException('Subscription author not found', 404);
 
-    if (author._id.toString() === user._id.toString()) {
+    if (author._id.toString() === user._id.toString())
       throw new HttpException('You cannot subscribe to your own plan', 400);
-    }
 
     if (!author.stripeAccountId) {
       throw new HttpException(
@@ -204,35 +300,61 @@ export class PaymentService {
       );
     }
 
-    const existingCompletedPayment = await this.paymentModel.findOne({
+    const existingCompleted = await this.paymentModel.findOne({
       user: user._id,
       plan: plan._id,
       paymentType: 'subscription',
       status: 'completed',
     } as any);
-
-    if (existingCompletedPayment) {
+    if (existingCompleted)
       throw new HttpException('Subscription already purchased', 400);
-    }
 
-    const existingPendingPayment = await this.paymentModel.findOne({
+    const stripePaymentMethodId = await this.resolveStripePaymentMethodId(
+      user,
+      savedMethodId,
+    );
+
+    const existingPending = await this.paymentModel.findOne({
       user: user._id,
       plan: plan._id,
       paymentType: 'subscription',
       status: 'pending',
     } as any);
 
-    if (existingPendingPayment?.stripeSessionId) {
-      const existingSession = await this.stripe.checkout.sessions.retrieve(
-        existingPendingPayment.stripeSessionId,
+    if (existingPending?.stripePaymentIntentId) {
+      const pi = await this.stripe.paymentIntents.retrieve(
+        existingPending.stripePaymentIntentId,
       );
+      if (pi.status !== 'succeeded' && pi.status !== 'canceled') {
+        let latestPi = pi;
 
-      if (existingSession.status === 'open' && existingSession.url) {
-        return this.buildCheckoutResponse(
-          existingSession,
+        if (stripePaymentMethodId && pi.payment_method !== stripePaymentMethodId) {
+          const updateParams: Stripe.PaymentIntentUpdateParams = {
+            payment_method: stripePaymentMethodId,
+          };
+          if (!pi.customer && user.stripeCustomerId) {
+            updateParams.customer = user.stripeCustomerId;
+          }
+          latestPi = await this.stripe.paymentIntents.update(pi.id, updateParams);
+        }
+
+        if (
+          stripePaymentMethodId &&
+          ['requires_payment_method', 'requires_confirmation'].includes(
+            latestPi.status,
+          )
+        ) {
+          latestPi = await this.confirmPaymentIntentIfPossible(
+            latestPi.id,
+            stripePaymentMethodId,
+          );
+        }
+
+        return this.buildPaymentIntentResponse(
+          latestPi,
           plan.price,
-          existingPendingPayment.adminAmount,
-          existingPendingPayment.authorAmount,
+          existingPending.adminAmount,
+          existingPending.authorAmount,
         );
       }
     }
@@ -242,66 +364,57 @@ export class PaymentService {
     const totalAmountInCents = Math.round(plan.price * 100);
     const adminAmountInCents = Math.round(adminAmount * 100);
 
-    const session = await this.stripe.checkout.sessions.create({
-      mode: 'payment',
+    const piParams: Stripe.PaymentIntentCreateParams = {
+      amount: totalAmountInCents,
+      currency: 'usd',
       payment_method_types: ['card'],
-      line_items: [
-        {
-          price_data: {
-            currency: 'usd',
-            product_data: {
-              name: plan.name,
-              description: `Subscription plan (${plan.duration})`,
-            },
-            unit_amount: totalAmountInCents,
-          },
-          quantity: 1,
-        },
-      ],
-      payment_intent_data: {
-        application_fee_amount: adminAmountInCents,
-        transfer_data: {
-          destination: author.stripeAccountId,
-        },
-      },
-      customer_email: user.email,
-      success_url: `${config.frontendUrl}/payment/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${config.frontendUrl}/payment/cancel`,
+      receipt_email: user.email,
+      application_fee_amount: adminAmountInCents,
+      transfer_data: { destination: author.stripeAccountId },
       metadata: {
         userId: user._id.toString(),
         planId: plan._id.toString(),
         authorId: author._id.toString(),
-        authorStripeAccountId: author.stripeAccountId,
         paymentType: 'subscription',
         price: plan.price.toString(),
         duration: plan.duration,
         adminAmount: adminAmount.toString(),
         authorAmount: authorAmount.toString(),
       },
-    } as Stripe.Checkout.SessionCreateParams);
+    };
 
-    if (existingPendingPayment) {
-      existingPendingPayment.stripeSessionId = session.id;
-      existingPendingPayment.amount = plan.price;
-      existingPendingPayment.authorAmount = authorAmount;
-      existingPendingPayment.adminAmount = adminAmount;
-      existingPendingPayment.paymentType = 'subscription';
-      existingPendingPayment.plan = plan._id as any;
-      await existingPendingPayment.save();
+    if (user.stripeCustomerId) {
+      piParams.customer = user.stripeCustomerId;
+    }
+
+    if (stripePaymentMethodId) {
+      piParams.payment_method = stripePaymentMethodId;
+      piParams.confirm = true;
+    }
+
+    const paymentIntent = await this.stripe.paymentIntents.create(piParams);
+
+    if (existingPending) {
+      existingPending.stripePaymentIntentId = paymentIntent.id;
+      existingPending.amount = plan.price;
+      existingPending.adminAmount = adminAmount;
+      existingPending.authorAmount = authorAmount;
+      await existingPending.save();
     } else {
       await this.paymentModel.create({
         user: user._id,
         plan: plan._id as any,
-        stripeSessionId: session.id,
+        stripePaymentIntentId: paymentIntent.id,
         amount: plan.price,
-        authorAmount,
         adminAmount,
+        authorAmount,
         paymentType: 'subscription',
+        status: 'pending',
       });
     }
 
-    return this.buildCheckoutResponse(
-      session,
+    return this.buildPaymentIntentResponse(
+      paymentIntent,
       plan.price,
       adminAmount,
       authorAmount,
@@ -315,10 +428,14 @@ export class PaymentService {
   ) {
     const user = await this.userModel.findById(userId);
     if (!user) throw new HttpException('User not found', 404);
+
     const { limit, page, skip, sortBy, sortOrder } = paginationHelper(options);
-    const whereConditions = buildWhereConditions(params, ['name', 'email'], {
-      user: userId,
-    });
+    const whereConditions = buildWhereConditions(
+      params,
+      ['paymentType', 'status'],
+      { user: userId },
+    );
+
     const total = await this.paymentModel.countDocuments(whereConditions);
     const payments = await this.paymentModel
       .find(whereConditions)
@@ -328,13 +445,7 @@ export class PaymentService {
       .populate('user')
       .populate('blog')
       .populate('plan');
-    return {
-      meta: {
-        page,
-        limit,
-        total,
-      },
-      data: payments,
-    };
+
+    return { meta: { page, limit, total }, data: payments };
   }
 }

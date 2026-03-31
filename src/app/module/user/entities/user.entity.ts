@@ -72,6 +72,9 @@ export class User {
   @Prop()
   stripeAccountId: string;
 
+  @Prop()
+  stripeCustomerId: string;
+
   @Prop({ type: [mongoose.Schema.Types.ObjectId], ref: 'Follower' })
   followersReaders: Types.ObjectId[];
 

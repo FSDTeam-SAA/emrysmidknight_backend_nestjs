@@ -22,7 +22,10 @@ import {
 } from '../subscriber/entities/subscriber.entity';
 import { NotificationService } from '../notification/notification.service';
 import { NotificationType } from '../notification/entities/notification.entity';
-import { Follower, FollowerDocument } from '../followers/entities/follower.entity';
+import {
+  Follower,
+  FollowerDocument,
+} from '../followers/entities/follower.entity';
 
 @Injectable()
 export class BlogService {
@@ -101,15 +104,18 @@ export class BlogService {
       ...createBlogDto,
       author: user._id as any,
     });
-    
+
     // Notify all followers
     const followers = await this.followerModel.find({ author: user._id });
-    const notifType = result.audienceType === 'paid' ? NotificationType.PREMIUM_CONTENT : NotificationType.AUTHOR_POST;
-    
+    const notifType =
+      result.audienceType === 'paid'
+        ? NotificationType.PREMIUM_CONTENT
+        : NotificationType.AUTHOR_POST;
+
     const notificationPromises = followers.map((f) => {
       const isPaid = result.audienceType === 'paid';
       const message = `${user.fullName} has published a new ${isPaid ? 'premium ' : ''}story "${result.title}"${isPaid ? ' Subscribe to unlock and continue reading.' : ''}`;
-      
+
       return this.notificationService.sendNotification({
         recipientId: f.followers.toString(),
         senderId: user._id.toString(),
@@ -325,9 +331,21 @@ export class BlogService {
     return { meta: { page, limit, total }, data: result };
   }
 
-  async getBlogsWithLockStatus(userId: string, options: IOptions) {
+  async getBlogsWithLockStatus(
+    userId: string,
+    params: IFilterParams,
+    options: IOptions,
+  ) {
     const user = await this.userModel.findById(userId);
     if (!user) throw new HttpException('User not found', 404);
+
+    const blogSearchAbleFields = [
+      'title',
+      'content',
+      'audienceType',
+      'category',
+    ];
+    const whereConditions = buildWhereConditions(params, blogSearchAbleFields);
 
     const { limit, page, skip, sortBy, sortOrder } = paginationHelper(options);
     const now = new Date();
@@ -369,10 +387,10 @@ export class BlogService {
       );
     }
 
-    // 4. সব blogs আনো
-    const total = await this.blogModel.countDocuments();
+    // 4. Filtered blogs আনো
+    const total = await this.blogModel.countDocuments(whereConditions);
     const blogs = await this.blogModel
-      .find()
+      .find(whereConditions)
       .skip(skip)
       .limit(limit)
       .sort({ [sortBy]: sortOrder } as any)

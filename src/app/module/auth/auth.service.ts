@@ -21,7 +21,6 @@ export class AuthService {
     private readonly jwtService: jwt.JwtService,
   ) {}
 
-
   private parseDeviceInfo(userAgent: string, ip: string): string {
     const parser = new UAParser.UAParser(userAgent);
     const result = parser.getResult();
@@ -89,6 +88,47 @@ export class AuthService {
       secure: true,
       sameSite: 'strict',
     });
+
+    const loginAlertTemplate = (deviceInfo: string) => `
+  <div style="font-family: system-ui, -apple-system, sans-serif; background:#f9fafb; padding:20px;">
+    
+    <div style="max-width:480px; margin:auto; background:#ffffff; border-radius:12px; padding:20px; box-shadow:0 4px 12px rgba(0,0,0,0.05);">
+      
+      <h3 style="margin:0 0 10px; color:#111;">🔐 New Login Detected</h3>
+      
+      <p style="margin:0 0 15px; color:#555; font-size:14px;">
+        A new login to your account was detected.
+      </p>
+
+      <div style="background:#f3f4f6; padding:10px 12px; border-radius:8px; font-size:13px; color:#333;">
+        <div><strong>Device:</strong> ${deviceInfo}</div>
+        <div><strong>Time:</strong> ${new Date().toLocaleString()}</div>
+      </div>
+
+      <p style="margin:15px 0 10px; font-size:13px; color:#666;">
+        If this was you, no action is needed.
+      </p>
+
+      <p style="margin:0; font-size:13px; color:#e11d48;">
+        If not, please change your password immediately.
+      </p>
+
+    </div>
+
+    <p style="text-align:center; font-size:12px; color:#aaa; margin-top:10px;">
+      © Your App • Security Alert
+    </p>
+
+  </div>
+`;
+
+    if (user.loginAlerts) {
+      await sendMailer(
+        user.email,
+        'Login Alert',
+        loginAlertTemplate(deviceInfo),
+      );
+    }
 
     return { accessToken, user };
   }

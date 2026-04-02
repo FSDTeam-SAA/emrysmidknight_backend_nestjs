@@ -151,7 +151,7 @@ export class BlogService {
         populate: {
           path: 'user',
         },
-      });;
+      });
     return { meta: { page, limit, total }, data: result };
   }
 
@@ -185,7 +185,7 @@ export class BlogService {
         populate: {
           path: 'user',
         },
-      });;
+      });
     return { meta: { page, limit, total }, data: result };
   }
 
@@ -420,7 +420,7 @@ export class BlogService {
         populate: {
           path: 'user',
         },
-      });;
+      });
 
     // 5. isLocked status যোগ করো
     const data = blogs.map((blog) => {
@@ -436,5 +436,12 @@ export class BlogService {
     });
 
     return { meta: { page, limit, total }, data };
+  }
+
+  async loginAlert(userId: string) {
+    const user = await this.userModel.findById(userId);
+    if (!user) throw new HttpException('User not found', 404);
+
+    
   }
 }

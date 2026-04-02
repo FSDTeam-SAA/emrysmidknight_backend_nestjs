@@ -14,6 +14,7 @@ import { FollowersModule } from './app/module/followers/followers.module';
 import { CommentModule } from './app/module/comment/comment.module';
 import { BookmarkModule } from './app/module/bookmark/bookmark.module';
 import { PaymentMethodModule } from './app/module/payment-method/payment-method.module';
+import { SessionModule } from './app/module/session/session.module';
 
 import config from './app/config';
 
@@ -32,6 +33,7 @@ import config from './app/config';
     CommentModule,
     BookmarkModule,
     PaymentMethodModule,
+    SessionModule,
   ],
   controllers: [AppController],
   providers: [AppService],

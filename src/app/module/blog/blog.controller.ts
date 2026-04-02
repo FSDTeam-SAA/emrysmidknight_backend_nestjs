@@ -171,6 +171,11 @@ export class BlogController {
   })
   @ApiBearerAuth('access-token')
   @UseGuards(AuthGuard('author', 'reader'))
+  @ApiQuery({ name: 'searchTerm', required: false, type: String })
+  @ApiQuery({ name: 'title', required: false, type: String })
+  @ApiQuery({ name: 'content', required: false, type: String })
+  @ApiQuery({ name: 'audienceType', required: false, type: String })
+  @ApiQuery({ name: 'category', required: false, type: String })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiQuery({ name: 'sortBy', required: false, type: String })
@@ -183,9 +188,17 @@ export class BlogController {
   @HttpCode(HttpStatus.OK)
   async getBlogsWithLockStatus(@Req() req: Request) {
     const userId = req.user!.id;
+    const params = pick(req.query, [
+      'searchTerm',
+      'title',
+      'content',
+      'audienceType',
+      'category',
+    ]);
     const options = pick(req.query, ['page', 'limit', 'sortBy', 'sortOrder']);
     const result = await this.blogService.getBlogsWithLockStatus(
       userId,
+      params,
       options,
     );
     return {

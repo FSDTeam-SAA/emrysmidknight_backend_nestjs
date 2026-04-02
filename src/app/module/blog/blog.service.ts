@@ -145,7 +145,8 @@ export class BlogService {
       .skip(skip)
       .limit(limit)
       .sort({ [sortBy]: sortOrder } as any)
-      .populate('author');
+      .populate('author')
+      .populate('comments');
     return { meta: { page, limit, total }, data: result };
   }
 
@@ -173,7 +174,8 @@ export class BlogService {
       .skip(skip)
       .limit(limit)
       .sort({ [sortBy]: sortOrder } as any)
-      .populate('author');
+      .populate('author')
+      .populate('comments');
     return { meta: { page, limit, total }, data: result };
   }
 
@@ -230,7 +232,10 @@ export class BlogService {
   }
 
   async getSingleBlog(id: string) {
-    const result = await this.blogModel.findById(id).populate('author');
+    const result = await this.blogModel
+      .findById(id)
+      .populate('author')
+      .populate('comments');
     if (!result) throw new HttpException('Blog not found', 404);
     return result;
   }
@@ -394,7 +399,8 @@ export class BlogService {
       .skip(skip)
       .limit(limit)
       .sort({ [sortBy]: sortOrder } as any)
-      .populate('author');
+      .populate('author')
+      .populate('comments');
 
     // 5. isLocked status যোগ করো
     const data = blogs.map((blog) => {

@@ -80,6 +80,9 @@ export class User {
 
   @Prop({ type: [mongoose.Schema.Types.ObjectId], ref: 'Follower' })
   followingAuthors: Types.ObjectId[];
+
+  @Prop({ default: true })
+  loginAlerts: boolean;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

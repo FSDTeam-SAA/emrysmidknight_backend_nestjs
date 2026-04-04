@@ -7,7 +7,6 @@ import {
   HttpCode,
   HttpStatus,
   UseGuards,
-  UploadedFile,
   Req,
   Param,
   Put,
@@ -23,6 +22,7 @@ import {
   ApiBearerAuth,
   ApiBody,
   ApiConsumes,
+  ApiHeader,
   ApiOperation,
   ApiQuery,
 } from '@nestjs/swagger';
@@ -30,11 +30,30 @@ import AuthGuard from 'src/app/middlewares/auth.guard';
 import { ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
 import pick from 'src/app/helpers/pick';
+import { JwtService } from '@nestjs/jwt';
+import config from 'src/app/config';
 
 @ApiTags('User')
 @Controller('user')
 export class UserController {
-  constructor(private readonly userService: UserService) {}
+  constructor(
+    private readonly userService: UserService,
+    private readonly jwtService: JwtService,
+  ) {}
+
+  private extractViewerId(req: Request) {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) return undefined;
+
+    try {
+      const decoded = this.jwtService.verify<{ id: string }>(token, {
+        secret: config.jwt.accessTokenSecret!,
+      });
+      return decoded.id;
+    } catch {
+      return undefined;
+    }
+  }
 
   @Post()
   @ApiOperation({
@@ -121,7 +140,11 @@ export class UserController {
   @HttpCode(HttpStatus.CREATED)
   async createUser(
     @Body() createUserDto: CreateUserDto,
-    @UploadedFiles() files: { profilePicture?: Express.Multer.File[]; coverPicture?: Express.Multer.File[] },
+    @UploadedFiles()
+    files: {
+      profilePicture?: Express.Multer.File[];
+      coverPicture?: Express.Multer.File[];
+    },
   ) {
     const result = await this.userService.createUser(
       createUserDto,
@@ -307,7 +330,11 @@ export class UserController {
   async updateProfile(
     @Req() req: Request,
     @Body() updateUserDto: UpdateUserDto,
-    @UploadedFiles() files?: { profilePicture?: Express.Multer.File[]; coverPicture?: Express.Multer.File[] },
+    @UploadedFiles()
+    files?: {
+      profilePicture?: Express.Multer.File[];
+      coverPicture?: Express.Multer.File[];
+    },
   ) {
     const result = await this.userService.updateMyProfile(
       req.user!.id,
@@ -387,6 +414,63 @@ export class UserController {
     };
   }
 
+  @Get('author-profile/:authorId')
+  @ApiOperation({
+    summary:
+      'Get author public profile with created blogs, lock status and subscription info',
+  })
+  @ApiBearerAuth('access-token')
+  @ApiQuery({
+    name: 'searchTerm',
+    required: false,
+    type: String,
+    description: 'Search within this author blogs',
+  })
+  @ApiQuery({ name: 'title', required: false, type: String })
+  @ApiQuery({ name: 'content', required: false, type: String })
+  @ApiQuery({ name: 'audienceType', required: false, type: String })
+  @ApiQuery({ name: 'category', required: false, type: String })
+  @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
+  @ApiQuery({ name: 'limit', required: false, type: Number, example: 10 })
+  @ApiQuery({
+    name: 'sortBy',
+    required: false,
+    type: String,
+    example: 'createdAt',
+  })
+  @ApiQuery({
+    name: 'sortOrder',
+    required: false,
+    enum: ['asc', 'desc'],
+    example: 'desc',
+  })
+  @HttpCode(HttpStatus.OK)
+  async getAuthorProfile(
+    @Param('authorId') authorId: string,
+    @Req() req: Request,
+  ) {
+    const params = pick(req.query, [
+      'searchTerm',
+      'title',
+      'content',
+      'audienceType',
+      'category',
+    ]);
+    const options = pick(req.query, ['page', 'limit', 'sortBy', 'sortOrder']);
+    const viewerId = this.extractViewerId(req);
+    const result = await this.userService.getAuthorProfile(
+      authorId,
+      params,
+      options,
+      viewerId,
+    );
+
+    return {
+      message: 'Author profile fetched successfully',
+      data: result,
+    };
+  }
+
   @Get(':id')
   @ApiOperation({
     summary: 'Get single user by id',
@@ -429,7 +513,11 @@ export class UserController {
   async updateUser(
     @Param('id') id: string,
     @Body() updateUserDto: UpdateUserDto,
-    @UploadedFiles() files?: { profilePicture?: Express.Multer.File[]; coverPicture?: Express.Multer.File[] },
+    @UploadedFiles()
+    files?: {
+      profilePicture?: Express.Multer.File[];
+      coverPicture?: Express.Multer.File[];
+    },
   ) {
     const result = await this.userService.updateUser(
       id,

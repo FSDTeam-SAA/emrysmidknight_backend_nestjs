@@ -10,14 +10,14 @@ export class User {
     required: [true, 'Full name is required'],
     trim: true,
   })
-  fullName: string;
+  fullName!: string;
 
   @Prop({
     required: [true, 'User name is required'],
     trim: true,
     unique: true,
   })
-  userName: string;
+  userName!: string;
 
   @Prop({
     required: [true, 'Email is required'],
@@ -25,37 +25,37 @@ export class User {
     lowercase: true,
     trim: true,
   })
-  email: string;
+  email!: string;
 
   @Prop({
     required: [true, 'Password is required'],
     minlength: 6,
     select: false,
   })
-  password: string;
+  password!: string;
 
   @Prop({
     enum: ['author', 'reader'],
   })
-  role: string;
+  role!: string;
 
   @Prop()
-  pronounce: string;
+  pronounce!: string;
 
   @Prop({ enum: ['male', 'female'] })
-  gender: string;
+  gender!: string;
 
   @Prop()
-  phoneNumber: string;
+  phoneNumber!: string;
 
   @Prop()
-  bio: string;
+  bio!: string;
 
   @Prop()
-  profilePicture: string;
+  profilePicture!: string;
 
   @Prop()
-  coverPicture: string;
+  coverPicture!: string;
 
   @Prop()
   dateOfBirth?: Date;
@@ -67,22 +67,22 @@ export class User {
   otpExpiry?: Date;
 
   @Prop()
-  verifiedForget: boolean;
+  verifiedForget!: boolean;
 
   @Prop()
-  stripeAccountId: string;
+  stripeAccountId!: string;
 
   @Prop()
-  stripeCustomerId: string;
+  stripeCustomerId!: string;
 
   @Prop({ type: [mongoose.Schema.Types.ObjectId], ref: 'Follower' })
-  followersReaders: Types.ObjectId[];
+  followersReaders!: Types.ObjectId[];
 
   @Prop({ type: [mongoose.Schema.Types.ObjectId], ref: 'Follower' })
-  followingAuthors: Types.ObjectId[];
+  followingAuthors!: Types.ObjectId[];
 
   @Prop({ default: true })
-  loginAlerts: boolean;
+  loginAlerts!: boolean;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

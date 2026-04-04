@@ -453,7 +453,5 @@ export class BlogService {
   async loginAlert(userId: string) {
     const user = await this.userModel.findById(userId);
     if (!user) throw new HttpException('User not found', 404);
-
-    
   }
 }

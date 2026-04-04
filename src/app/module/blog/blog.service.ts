@@ -26,6 +26,10 @@ import {
   Follower,
   FollowerDocument,
 } from '../followers/entities/follower.entity';
+import {
+  Bookmark,
+  BookmarkDocument,
+} from '../bookmark/entities/bookmark.entity';
 
 @Injectable()
 export class BlogService {
@@ -40,6 +44,8 @@ export class BlogService {
     private readonly subscriptionModel: Model<SubscriptionDocument>,
     @InjectModel(Follower.name)
     private readonly followerModel: Model<FollowerDocument>,
+    @InjectModel(Bookmark.name)
+    private readonly bookmarkModel: Model<BookmarkDocument>,
     private readonly notificationService: NotificationService,
   ) {}
 
@@ -407,6 +413,11 @@ export class BlogService {
       );
     }
 
+    const bookmarks = await this.bookmarkModel.find({ user: user._id });
+    const bookmarkedBlogIds = new Set(
+      bookmarks.map((bookmark) => bookmark.blog?.toString()).filter(Boolean),
+    );
+
     // 4. Filtered blogs আনো
     const total = await this.blogModel.countDocuments(whereConditions);
     const blogs = await this.blogModel
@@ -429,10 +440,11 @@ export class BlogService {
       const isFree = blog.audienceType === 'free';
       const isPurchased = purchasedBlogIds.has(blogId);
       const isSubscribed = subscribedBlogIds.has(blogId);
+      const isBookmarked = bookmarkedBlogIds.has(blogId);
 
       const isLocked = !isFree && !isOwner && !isPurchased && !isSubscribed;
 
-      return { ...blog.toObject(), isLocked };
+      return { ...blog.toObject(), isLocked, isBookmarked };
     });
 
     return { meta: { page, limit, total }, data };

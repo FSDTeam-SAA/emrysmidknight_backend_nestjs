@@ -18,6 +18,10 @@ import {
   Follower,
   FollowerSchema,
 } from '../followers/entities/follower.entity';
+import {
+  Bookmark,
+  BookmarkSchema,
+} from '../bookmark/entities/bookmark.entity';
 
 @Module({
   imports: [
@@ -29,6 +33,7 @@ import {
       { name: UserSubscription.name, schema: UserSubscriptionSchema },
       { name: Subscription.name, schema: SubscriptionSchema },
       { name: Follower.name, schema: FollowerSchema },
+      { name: Bookmark.name, schema: BookmarkSchema },
     ]),
   ],
   controllers: [BlogController],

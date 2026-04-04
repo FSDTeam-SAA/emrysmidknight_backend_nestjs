@@ -184,14 +184,20 @@ export class PaymentService {
       if (pi.status !== 'succeeded' && pi.status !== 'canceled') {
         let latestPi = pi;
 
-        if (stripePaymentMethodId && pi.payment_method !== stripePaymentMethodId) {
+        if (
+          stripePaymentMethodId &&
+          pi.payment_method !== stripePaymentMethodId
+        ) {
           const updateParams: Stripe.PaymentIntentUpdateParams = {
             payment_method: stripePaymentMethodId,
           };
           if (!pi.customer && user.stripeCustomerId) {
             updateParams.customer = user.stripeCustomerId;
           }
-          latestPi = await this.stripe.paymentIntents.update(pi.id, updateParams);
+          latestPi = await this.stripe.paymentIntents.update(
+            pi.id,
+            updateParams,
+          );
         }
 
         if (
@@ -328,14 +334,20 @@ export class PaymentService {
       if (pi.status !== 'succeeded' && pi.status !== 'canceled') {
         let latestPi = pi;
 
-        if (stripePaymentMethodId && pi.payment_method !== stripePaymentMethodId) {
+        if (
+          stripePaymentMethodId &&
+          pi.payment_method !== stripePaymentMethodId
+        ) {
           const updateParams: Stripe.PaymentIntentUpdateParams = {
             payment_method: stripePaymentMethodId,
           };
           if (!pi.customer && user.stripeCustomerId) {
             updateParams.customer = user.stripeCustomerId;
           }
-          latestPi = await this.stripe.paymentIntents.update(pi.id, updateParams);
+          latestPi = await this.stripe.paymentIntents.update(
+            pi.id,
+            updateParams,
+          );
         }
 
         if (
@@ -444,7 +456,18 @@ export class PaymentService {
       .sort({ [sortBy]: sortOrder } as any)
       .populate('user')
       .populate('blog')
-      .populate('plan');
+      .populate({
+        path: 'plan',
+        populate: {
+          path: 'author',
+        },
+      })
+      .populate({
+        path: 'plan',
+        populate: {
+          path: 'blogs',
+        },
+      });
 
     return { meta: { page, limit, total }, data: payments };
   }
@@ -568,7 +591,8 @@ export class PaymentService {
       }
 
       return (
-        (new Date(a.purchasedAt).getTime() - new Date(b.purchasedAt).getTime()) *
+        (new Date(a.purchasedAt).getTime() -
+          new Date(b.purchasedAt).getTime()) *
         direction
       );
     });

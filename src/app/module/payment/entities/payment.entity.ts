@@ -6,7 +6,7 @@ export type PaymentDocument = HydratedDocument<Payment>;
 @Schema({ timestamps: true })
 export class Payment {
   @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true })
-  user: Types.ObjectId;
+  user!: Types.ObjectId;
 
   // optional (single blog purchase)
   @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'Blog' })
@@ -17,28 +17,28 @@ export class Payment {
   plan?: mongoose.Schema.Types.ObjectId;
 
   @Prop({ required: true })
-  amount: number;
+  amount!: number;
 
   @Prop({ required: true })
-  authorAmount: number;
+  authorAmount!: number;
 
   @Prop({ required: true })
-  adminAmount: number;
+  adminAmount!: number;
 
   @Prop({ enum: ['blog', 'subscription'], required: true })
-  paymentType: string;
+  paymentType!: string;
 
   @Prop({
     enum: ['pending', 'completed', 'failed', 'refunded'],
     default: 'pending',
   })
-  status: string;
+  status!: string;
 
   @Prop()
-  stripeSessionId: string;
+  stripeSessionId!: string;
 
   @Prop()
-  stripePaymentIntentId: string;
+  stripePaymentIntentId!: string;
 }
 
 export const PaymentSchema = SchemaFactory.createForClass(Payment);

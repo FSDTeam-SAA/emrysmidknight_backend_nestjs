@@ -384,7 +384,31 @@ export class UserService {
     options: IOptions,
     viewerId?: string,
   ) {
-    const author = await this.userModel.findById(authorId).lean();
+    const author = await this.userModel
+      .findById(authorId)
+      .populate({
+        path: 'followersReaders',
+        populate: [
+          {
+            path: 'followers',
+          },
+          {
+            path: 'author',
+          },
+        ],
+      })
+      .populate({
+        path: 'followingAuthors',
+        populate: [
+          {
+            path: 'followers',
+          },
+          {
+            path: 'author',
+          },
+        ],
+      })
+      .lean();
     if (!author || author.role !== 'author') {
       throw new HttpException('Author not found', 404);
     }

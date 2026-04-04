@@ -139,7 +139,7 @@ export class UserController {
   @ApiOperation({
     summary: 'Get the all user',
   })
-  @ApiBearerAuth('access-token')
+  // @ApiBearerAuth('access-token')
   @ApiQuery({
     name: 'searchTerm',
     required: false,
@@ -245,7 +245,7 @@ export class UserController {
     example: 'desc',
     description: 'Sort order. Default is desc',
   })
-  @UseGuards(AuthGuard('admin'))
+  // @UseGuards(AuthGuard('admin'))
   @HttpCode(HttpStatus.OK)
   async getAllUser(@Req() req: Request) {
     const params = pick(req.query, [

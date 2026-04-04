@@ -35,6 +35,47 @@ class PayWithMethodDto {
 export class PaymentController {
   constructor(private readonly paymentService: PaymentService) {}
 
+  @Get('author-sales')
+  @ApiOperation({
+    summary:
+      'Get all completed single blog unlocks and subscription purchases for the logged-in author',
+  })
+  @ApiBearerAuth('access-token')
+  @ApiQuery({ name: 'searchTerm', required: false })
+  @ApiQuery({
+    name: 'paymentType',
+    required: false,
+    enum: ['blog', 'subscription'],
+  })
+  @ApiQuery({ name: 'blogId', required: false, type: String })
+  @ApiQuery({ name: 'planId', required: false, type: String })
+  @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
+  @ApiQuery({ name: 'limit', required: false, type: Number, example: 10 })
+  @ApiQuery({ name: 'sortBy', required: false, example: 'purchasedAt' })
+  @ApiQuery({ name: 'sortOrder', required: false, enum: ['asc', 'desc'] })
+  @UseGuards(AuthGuard('author'))
+  @HttpCode(HttpStatus.OK)
+  async getAuthorSales(@Req() req: Request) {
+    const filters = pick(req.query, [
+      'searchTerm',
+      'paymentType',
+      'blogId',
+      'planId',
+    ]);
+    const options = pick(req.query, ['page', 'limit', 'sortBy', 'sortOrder']);
+    const result = await this.paymentService.getAuthorSales(
+      req.user!.id,
+      filters,
+      options,
+    );
+    return {
+      message: 'Author sales fetched successfully',
+      meta: result.meta,
+      data: result.data,
+      summary: result.summary,
+    };
+  }
+
   // GET /payment/my-payments
   @Get('my-payments')
   @ApiOperation({ summary: 'Get my payments' })

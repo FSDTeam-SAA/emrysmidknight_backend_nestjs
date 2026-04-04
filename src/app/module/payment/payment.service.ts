@@ -448,4 +448,154 @@ export class PaymentService {
 
     return { meta: { page, limit, total }, data: payments };
   }
+
+  async getAuthorSales(
+    authorId: string,
+    params: IFilterParams,
+    options: IOptions,
+  ) {
+    const author = await this.userModel.findById(authorId);
+    if (!author) throw new HttpException('Author not found', 404);
+
+    const { limit, page, skip, sortBy, sortOrder } = paginationHelper(options);
+
+    const [blogs, plans] = await Promise.all([
+      this.blogModel
+        .find({ author: author._id } as any)
+        .select('_id title price'),
+      this.subscriptionModel
+        .find({ author: author._id } as any)
+        .select('_id name price duration'),
+    ]);
+
+    const blogIds = blogs.map((blog) => blog._id);
+    const planIds = plans.map((plan) => plan._id);
+
+    if (!blogIds.length && !planIds.length) {
+      return {
+        meta: {
+          page,
+          limit,
+          total: 0,
+        },
+        summary: {
+          totalSingleUnlocks: 0,
+          totalSubscriptions: 0,
+          totalRevenue: 0,
+        },
+        data: [],
+      };
+    }
+
+    const payments = await this.paymentModel
+      .find({
+        status: 'completed',
+        $or: [
+          ...(blogIds.length ? [{ blog: { $in: blogIds } }] : []),
+          ...(planIds.length ? [{ plan: { $in: planIds } as any }] : []),
+        ],
+      } as any)
+      .sort({ createdAt: -1 } as any)
+      .populate('user')
+      .populate('blog')
+      .populate('plan');
+
+    const sales = payments.map((payment) => {
+      const buyer = payment.user as any;
+      const blog = payment.blog as any;
+      const plan = payment.plan as any;
+
+      return {
+        paymentId: payment._id,
+        paymentType: payment.paymentType,
+        buyer,
+        blog,
+        plan,
+        amount: payment.amount,
+        authorAmount: payment.authorAmount,
+        adminAmount: payment.adminAmount,
+        status: payment.status,
+        purchasedAt: (payment as any).createdAt,
+      };
+    });
+
+    let filteredSales = sales;
+
+    if (params.paymentType) {
+      filteredSales = filteredSales.filter(
+        (sale) => sale.paymentType === params.paymentType,
+      );
+    }
+
+    if (params.blogId) {
+      filteredSales = filteredSales.filter(
+        (sale) => sale.blog?._id?.toString() === params.blogId,
+      );
+    }
+
+    if (params.planId) {
+      filteredSales = filteredSales.filter(
+        (sale) => sale.plan?._id?.toString() === params.planId,
+      );
+    }
+
+    if (params.searchTerm) {
+      const searchTerm = params.searchTerm.toLowerCase();
+      filteredSales = filteredSales.filter((sale) => {
+        const searchableValues = [
+          sale.buyer?.fullName,
+          sale.buyer?.email,
+          sale.buyer?.userName,
+          sale.blog?.title,
+          sale.plan?.name,
+        ]
+          .filter(Boolean)
+          .map((value) => String(value).toLowerCase());
+
+        return searchableValues.some((value) => value.includes(searchTerm));
+      });
+    }
+
+    filteredSales = filteredSales.sort((a, b) => {
+      const direction = sortOrder === 'asc' ? 1 : -1;
+
+      if (sortBy === 'amount') {
+        return (Number(a.amount) - Number(b.amount)) * direction;
+      }
+
+      if (sortBy === 'authorAmount') {
+        return (Number(a.authorAmount) - Number(b.authorAmount)) * direction;
+      }
+
+      return (
+        (new Date(a.purchasedAt).getTime() - new Date(b.purchasedAt).getTime()) *
+        direction
+      );
+    });
+
+    const totalRevenue = filteredSales.reduce(
+      (sum, payment) => sum + Number(payment.authorAmount || 0),
+      0,
+    );
+
+    const paginatedSales = filteredSales.slice(skip, skip + limit);
+
+    return {
+      meta: {
+        page,
+        limit,
+        total: filteredSales.length,
+      },
+      summary: {
+        totalSingleUnlocks: filteredSales.filter(
+          (sale) => sale.paymentType === 'blog',
+        ).length,
+        totalSubscriptions: filteredSales.filter(
+          (sale) => sale.paymentType === 'subscription',
+        ).length,
+        totalRevenue,
+      },
+      data: paginatedSales,
+    };
+  }
 }

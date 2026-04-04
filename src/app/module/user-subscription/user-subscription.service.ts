@@ -107,4 +107,38 @@ export class UserSubscriptionService {
       blogId,
     };
   }
+
+  async getBlogPurchaseOptions(userId: string, blogId: string) {
+    const blog = await this.blogModel.findById(blogId).populate('author');
+    if (!blog) {
+      throw new HttpException('Blog not found', 404);
+    }
+
+    const isOwner = (blog.author as any)?._id?.toString() === userId;
+    const access = await this.checkBlogAccess(userId, blogId);
+
+    const availablePlans = isOwner
+      ? []
+      : await this.subscriptionModel
+          .find({
+            author: (blog.author as any)?._id,
+            blogs: blog._id,
+          } as any)
+          .populate('author')
+          .populate('blogs');
+
+    return {
+      blogId,
+      blogTitle: blog.title,
+      audienceType: blog.audienceType,
+      blogPrice: blog.price,
+      isOwner,
+      hasAccess: access.hasAccess,
+      accessType: access.accessType,
+      canUnlockDirectly:
+        !isOwner && blog.audienceType === 'paid' && blog.price > 0,
+      canSubscribe: !isOwner && availablePlans.length > 0,
+      availablePlans,
+    };
+  }
 }

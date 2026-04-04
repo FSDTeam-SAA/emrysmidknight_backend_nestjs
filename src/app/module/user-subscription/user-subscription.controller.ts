@@ -8,7 +8,12 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { UserSubscriptionService } from './user-subscription.service';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiParam,
+  ApiTags,
+} from '@nestjs/swagger';
 import AuthGuard from 'src/app/middlewares/auth.guard';
 import type { Request } from 'express';
 
@@ -50,6 +55,30 @@ export class UserSubscriptionController {
 
     return {
       message: 'Blog access checked successfully',
+      data: result,
+    };
+  }
+
+  @Get('blog-purchase-options/:blogId')
+  @ApiOperation({
+    summary:
+      'Get purchase options for a paid blog including single unlock and subscription plans',
+  })
+  @ApiParam({ name: 'blogId', type: String, description: 'Blog id' })
+  @ApiBearerAuth('access-token')
+  @UseGuards(AuthGuard('reader'))
+  @HttpCode(HttpStatus.OK)
+  async getBlogPurchaseOptions(
+    @Req() req: Request,
+    @Param('blogId') blogId: string,
+  ) {
+    const result = await this.userSubscriptionService.getBlogPurchaseOptions(
+      req.user!.id,
+      blogId,
+    );
+
+    return {
+      message: 'Blog purchase options fetched successfully',
       data: result,
     };
   }

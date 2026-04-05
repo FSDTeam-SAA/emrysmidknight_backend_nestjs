@@ -58,6 +58,13 @@ export class SubscriberService {
       throw new HttpException('Author not found', 404);
     }
 
+    if (createSubscriberDto.price > 0 && !author.stripeAccountId) {
+      throw new HttpException(
+        'You need to have a stripe account to create a paid subscription',
+        400,
+      );
+    }
+
     await this.validateSubscriptionBlogs(authorId, createSubscriberDto.blogs);
 
     const result = await this.subscriptionModel.create({

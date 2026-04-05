@@ -72,6 +72,10 @@ export class BlogService {
     const user = await this.userModel.findById(userId);
     if (!user) throw new HttpException('User not found', 404);
 
+    if (createBlogDto.price && createBlogDto.price > 0 && !user.stripeAccountId) {
+      throw new HttpException('You need to have a stripe account to create a paid blog', 400);
+    }
+
     if (files) {
       const uploadPromises: Promise<void>[] = [];
 

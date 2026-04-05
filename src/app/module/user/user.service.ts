@@ -127,6 +127,13 @@ export class UserService {
     return parsed.toString();
   }
 
+  private isStripeTestMode() {
+    return (
+      config.env !== 'production' &&
+      Boolean(config.stripe.secretKey?.startsWith('sk_test_'))
+    );
+  }
+
   private async createOnboardingLink(accountId: string) {
     try {
       return await this.stripe.accountLinks.create({
@@ -227,6 +234,7 @@ export class UserService {
     const nameParts = (user.fullName ?? '').trim().split(/\s+/).filter(Boolean);
     const firstName = nameParts[0] ?? 'Author';
     const lastName = nameParts.slice(1).join(' ') || firstName;
+    const isStripeTestMode = this.isStripeTestMode();
 
     const businessProfileUrl = this.getStripeBusinessProfileUrl();
     const accountCreateParams: Stripe.AccountCreateParams = {
@@ -237,6 +245,11 @@ export class UserService {
         first_name: firstName,
         last_name: lastName,
         email: user.email,
+        ...(isStripeTestMode
+          ? {
+              id_number: '000000000',
+            }
+          : {}),
       },
       business_profile: {
         name: 'emrysmidknight',

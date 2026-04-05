@@ -1,4 +1,4 @@
-import { HttpException, Injectable } from '@nestjs/common';
+import { HttpException, Injectable, Logger } from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { InjectModel } from '@nestjs/mongoose';
@@ -41,6 +41,8 @@ const userSearchAbleFields = [
 @Injectable()
 export class UserService {
   private stripe: Stripe;
+  private readonly frontendBaseUrl: string;
+  private readonly logger = new Logger(UserService.name);
   constructor(
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
     @InjectModel(Blog.name) private readonly blogModel: Model<BlogDocument>,
@@ -54,6 +56,36 @@ export class UserService {
     private readonly paymentModel: Model<PaymentDocument>,
   ) {
     this.stripe = new Stripe(config.stripe.secretKey!);
+    this.frontendBaseUrl = this.normalizeFrontendUrl(config.frontendUrl);
+  }
+
+  private normalizeFrontendUrl(url?: string) {
+    const raw = (url ?? '').trim();
+    if (!raw) {
+      throw new HttpException(
+        'FRONTEND_URL is missing. Please set a valid http/https URL.',
+        500,
+      );
+    }
+
+    let parsed: URL;
+    try {
+      parsed = new URL(raw);
+    } catch {
+      throw new HttpException(
+        'FRONTEND_URL is invalid. Example: http://localhost:3000',
+        500,
+      );
+    }
+
+    if (!['http:', 'https:'].includes(parsed.protocol)) {
+      throw new HttpException(
+        'FRONTEND_URL must start with http:// or https://',
+        500,
+      );
+    }
+
+    return parsed.origin;
   }
 
   private getContentPreview(content?: string, previewLength = 220) {
@@ -81,20 +113,37 @@ export class UserService {
   }
 
   private getStripeRefreshUrl() {
-    return `${config.frontendUrl}/connect/refresh`;
+    return `${this.frontendBaseUrl}/connect/refresh`;
   }
 
   private getStripeReturnUrl() {
-    return `${config.frontendUrl}/stripe-account-success`;
+    return `${this.frontendBaseUrl}/stripe-account-success`;
+  }
+
+  private getStripeBusinessProfileUrl() {
+    const parsed = new URL(this.frontendBaseUrl);
+    const localHosts = ['localhost', '127.0.0.1', '::1'];
+    if (localHosts.includes(parsed.hostname)) return undefined;
+    return parsed.toString();
   }
 
   private async createOnboardingLink(accountId: string) {
-    return this.stripe.accountLinks.create({
-      account: accountId,
-      refresh_url: this.getStripeRefreshUrl(),
-      return_url: this.getStripeReturnUrl(),
-      type: 'account_onboarding',
-    });
+    try {
+      return await this.stripe.accountLinks.create({
+        account: accountId,
+        refresh_url: this.getStripeRefreshUrl(),
+        return_url: this.getStripeReturnUrl(),
+        type: 'account_onboarding',
+      });
+    } catch (error: any) {
+      this.logger.error(
+        `Stripe account link error: ${error?.message || 'unknown error'}`,
+      );
+      throw new HttpException(
+        error?.message || 'Failed to create Stripe onboarding link',
+        500,
+      );
+    }
   }
 
   async createUser(
@@ -214,19 +263,26 @@ export class UserService {
     return result;
   }
 
-  async authorStripeAccount(userId: string) {
-    const user = await this.userModel.findById(userId);
+  async authorStripeAccount(email: string) {
+    const normalizedEmail = email?.trim().toLowerCase();
+    if (!normalizedEmail) throw new HttpException('Email is required', 400);
+
+    const user = await this.userModel.findOne({ email: normalizedEmail });
     if (!user) throw new HttpException('User not found', 404);
+    if (user.role !== 'author') {
+      throw new HttpException('Only author accounts can create Stripe account', 400);
+    }
 
     if (user.stripeAccountId) {
-      return this.getAuthorStripeAccount(userId);
+      return this.getAuthorStripeAccount(user._id.toString());
     }
 
     const nameParts = (user.fullName ?? '').trim().split(/\s+/);
     const firstName = nameParts[0] ?? '';
     const lastName = nameParts.slice(1).join(' ') || firstName;
 
-    const account = await this.stripe.accounts.create({
+    const businessProfileUrl = this.getStripeBusinessProfileUrl();
+    const accountCreateParams: Stripe.AccountCreateParams = {
       type: 'express',
       email: user.email,
       business_type: 'individual',
@@ -238,14 +294,32 @@ export class UserService {
       business_profile: {
         name: 'emrysmidknight',
         product_description: 'blogging website',
-        url: config.frontendUrl,
       },
       settings: {
         payments: {
           statement_descriptor: 'EMRYSMIDKNIGHT',
         },
       },
-    });
+    };
+    if (businessProfileUrl) {
+      accountCreateParams.business_profile = {
+        ...accountCreateParams.business_profile,
+        url: businessProfileUrl,
+      };
+    }
+
+    let account: Stripe.Response<Stripe.Account>;
+    try {
+      account = await this.stripe.accounts.create(accountCreateParams);
+    } catch (error: any) {
+      this.logger.error(
+        `Stripe account create error: ${error?.message || 'unknown error'}`,
+      );
+      throw new HttpException(
+        error?.message || 'Failed to create Stripe account',
+        500,
+      );
+    }
 
     if (!account)
       throw new HttpException('Failed to create Stripe account', 500);

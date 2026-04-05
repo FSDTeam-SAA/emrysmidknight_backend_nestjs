@@ -12,10 +12,12 @@ import {
   Put,
   Delete,
   UploadedFiles,
+  HttpException,
 } from '@nestjs/common';
 import { UserService } from './user.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { CreateStripeAccountDto } from './dto/create-stripe-account.dto';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { fileUpload } from 'src/app/helpers/fileUploder';
 import {
@@ -368,16 +370,15 @@ export class UserController {
 
   @Post('/stripe-account')
   @ApiOperation({
-    summary: 'Create a Stripe Express account for the authenticated author',
+    summary: 'Create a Stripe Express account for an author by email',
     description:
-      'Creates a new Stripe Express account and returns an onboarding link. ' +
-      'Throws 400 if the author already has an account.',
+      'Creates or returns a Stripe Express account onboarding/dashboard link for the provided author email.',
   })
-  @ApiBearerAuth('access-token')
-  @UseGuards(AuthGuard('author'))
+  // @ApiBearerAuth('access-token')
+  // @UseGuards(AuthGuard('author'))
   @HttpCode(HttpStatus.CREATED)
-  async createAuthorStripeAccount(@Req() req: Request) {
-    const result = await this.userService.authorStripeAccount(req.user!.id);
+  async createAuthorStripeAccount(@Body() body: CreateStripeAccountDto) {
+    const result = await this.userService.authorStripeAccount(body.email);
     return {
       message: result.message,
       data: result,

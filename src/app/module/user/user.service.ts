@@ -146,6 +146,129 @@ export class UserService {
     }
   }
 
+  private async createDashboardLoginLink(accountId: string) {
+    try {
+      return await this.stripe.accounts.createLoginLink(accountId);
+    } catch (error: any) {
+      this.logger.error(
+        `Stripe dashboard link error: ${error?.message || 'unknown error'}`,
+      );
+      throw new HttpException(
+        error?.message || 'Failed to create Stripe dashboard link',
+        500,
+      );
+    }
+  }
+
+  private async findAuthorById(userId: string) {
+    const user = await this.userModel.findById(userId);
+    if (!user) throw new HttpException('User not found', 404);
+    if (user.role !== 'author') {
+      throw new HttpException(
+        'Only author accounts can manage Stripe account',
+        400,
+      );
+    }
+
+    return user;
+  }
+
+  private async retrieveStripeAccount(user: UserDocument) {
+    if (!user.stripeAccountId) return null;
+
+    try {
+      const account = await this.stripe.accounts.retrieve(user.stripeAccountId);
+
+      if ('deleted' in account && account.deleted) {
+        user.stripeAccountId = '';
+        await user.save();
+        return null;
+      }
+
+      return account;
+    } catch (error: any) {
+      if (error?.code === 'resource_missing') {
+        user.stripeAccountId = '';
+        await user.save();
+        return null;
+      }
+
+      this.logger.error(
+        `Stripe account retrieve error: ${error?.message || 'unknown error'}`,
+      );
+      throw new HttpException(
+        error?.message || 'Failed to retrieve Stripe account',
+        500,
+      );
+    }
+  }
+
+  private buildStripeAccountResponse(account: Stripe.Account, url: string) {
+    const onboardingComplete = Boolean(
+      account.details_submitted &&
+        account.charges_enabled &&
+        account.payouts_enabled,
+    );
+
+    return {
+      onboardingComplete,
+      accountId: account.id,
+      chargesEnabled: account.charges_enabled,
+      payoutsEnabled: account.payouts_enabled,
+      detailsSubmitted: account.details_submitted,
+      url,
+      message: onboardingComplete
+        ? 'Stripe dashboard link created successfully'
+        : 'Stripe onboarding link created successfully',
+    };
+  }
+
+  private async createStripeExpressAccount(user: UserDocument) {
+    const nameParts = (user.fullName ?? '').trim().split(/\s+/).filter(Boolean);
+    const firstName = nameParts[0] ?? 'Author';
+    const lastName = nameParts.slice(1).join(' ') || firstName;
+
+    const businessProfileUrl = this.getStripeBusinessProfileUrl();
+    const accountCreateParams: Stripe.AccountCreateParams = {
+      type: 'express',
+      email: user.email,
+      business_type: 'individual',
+      individual: {
+        first_name: firstName,
+        last_name: lastName,
+        email: user.email,
+      },
+      business_profile: {
+        name: 'emrysmidknight',
+        product_description: 'blogging website',
+      },
+      settings: {
+        payments: {
+          statement_descriptor: 'EMRYSMIDKNIGHT',
+        },
+      },
+    };
+
+    if (businessProfileUrl) {
+      accountCreateParams.business_profile = {
+        ...accountCreateParams.business_profile,
+        url: businessProfileUrl,
+      };
+    }
+
+    try {
+      return await this.stripe.accounts.create(accountCreateParams);
+    } catch (error: any) {
+      this.logger.error(
+        `Stripe account create error: ${error?.message || 'unknown error'}`,
+      );
+      throw new HttpException(
+        error?.message || 'Failed to create Stripe account',
+        500,
+      );
+    }
+  }
+
   async createUser(
     createUserDto: CreateUserDto,
     file?: Express.Multer.File,
@@ -263,149 +386,31 @@ export class UserService {
     return result;
   }
 
-  async authorStripeAccount(email: string) {
-    const normalizedEmail = email?.trim().toLowerCase();
-    if (!normalizedEmail) throw new HttpException('Email is required', 400);
-
-    const user = await this.userModel.findOne({ email: normalizedEmail });
-    if (!user) throw new HttpException('User not found', 404);
-    if (user.role !== 'author') {
-      throw new HttpException('Only author accounts can create Stripe account', 400);
-    }
-
-    if (user.stripeAccountId) {
-      return this.getAuthorStripeAccount(user._id.toString());
-    }
-
-    const nameParts = (user.fullName ?? '').trim().split(/\s+/);
-    const firstName = nameParts[0] ?? '';
-    const lastName = nameParts.slice(1).join(' ') || firstName;
-
-    const businessProfileUrl = this.getStripeBusinessProfileUrl();
-    const accountCreateParams: Stripe.AccountCreateParams = {
-      type: 'express',
-      email: user.email,
-      business_type: 'individual',
-      individual: {
-        first_name: firstName,
-        last_name: lastName,
-        email: user.email,
-      },
-      business_profile: {
-        name: 'emrysmidknight',
-        product_description: 'blogging website',
-      },
-      settings: {
-        payments: {
-          statement_descriptor: 'EMRYSMIDKNIGHT',
-        },
-      },
-    };
-    if (businessProfileUrl) {
-      accountCreateParams.business_profile = {
-        ...accountCreateParams.business_profile,
-        url: businessProfileUrl,
-      };
-    }
-
-    let account: Stripe.Response<Stripe.Account>;
-    try {
-      account = await this.stripe.accounts.create(accountCreateParams);
-    } catch (error: any) {
-      this.logger.error(
-        `Stripe account create error: ${error?.message || 'unknown error'}`,
-      );
-      throw new HttpException(
-        error?.message || 'Failed to create Stripe account',
-        500,
-      );
-    }
-
-    if (!account)
-      throw new HttpException('Failed to create Stripe account', 500);
-
-    user.stripeAccountId = account.id;
-    await user.save();
-
-    const accountLink = await this.createOnboardingLink(account.id);
-
-    return {
-      accountId: account.id,
-      onboardingComplete: false,
-      url: accountLink.url,
-      message: 'Stripe onboarding link created successfully',
-    };
+  async authorStripeAccount(userId: string) {
+    const user = await this.findAuthorById(userId);
+    return this.getOrCreateAuthorStripeAccount(user);
   }
 
-  async getAuthorStripeAccount(userId: string) {
-    const user = await this.userModel.findById(userId);
-    if (!user) throw new HttpException('User not found', 404);
+  private async getOrCreateAuthorStripeAccount(user: UserDocument) {
+    let account = await this.retrieveStripeAccount(user);
 
-    if (!user.stripeAccountId) {
-      throw new HttpException(
-        'No Stripe account found. Please create one first via POST /user/stripe-account.',
-        400,
-      );
-    }
-
-    let account: Stripe.Response<Stripe.Account>;
-    try {
-      account = await this.stripe.accounts.retrieve(user.stripeAccountId);
-    } catch (error: any) {
-      if (error?.code === 'resource_missing') {
-        user.stripeAccountId = '';
-        await user.save();
-        throw new HttpException(
-          'Stored Stripe account was not found. Please create it again.',
-          400,
-        );
-      }
-
-      throw new HttpException(
-        error?.message || 'Failed to retrieve Stripe account',
-        500,
-      );
-    }
-
-    if ('deleted' in account && account.deleted) {
-      user.stripeAccountId = '';
+    if (!account) {
+      account = await this.createStripeExpressAccount(user);
+      user.stripeAccountId = account.id;
       await user.save();
-      throw new HttpException(
-        'Stored Stripe account is no longer available. Please create it again.',
-        400,
-      );
     }
 
     const onboardingComplete = Boolean(
       account.details_submitted &&
-      account.charges_enabled &&
-      account.payouts_enabled,
+        account.charges_enabled &&
+        account.payouts_enabled,
     );
 
-    if (!onboardingComplete) {
-      const accountLink = await this.createOnboardingLink(user.stripeAccountId);
-      return {
-        onboardingComplete: false,
-        accountId: user.stripeAccountId,
-        chargesEnabled: account.charges_enabled,
-        payoutsEnabled: account.payouts_enabled,
-        url: accountLink.url,
-        message: 'Stripe onboarding is incomplete. Please complete it.',
-      };
-    }
+    const link = onboardingComplete
+      ? await this.createDashboardLoginLink(account.id)
+      : await this.createOnboardingLink(account.id);
 
-    const loginLink = await this.stripe.accounts.createLoginLink(
-      user.stripeAccountId,
-    );
-
-    return {
-      onboardingComplete: true,
-      accountId: user.stripeAccountId,
-      chargesEnabled: account.charges_enabled,
-      payoutsEnabled: account.payouts_enabled,
-      url: loginLink.url,
-      message: 'Stripe account retrieved successfully',
-    };
+    return this.buildStripeAccountResponse(account, link.url);
   }
 
   async topAuthors(options: IOptions) {

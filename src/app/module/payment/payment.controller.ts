@@ -108,7 +108,7 @@ export class PaymentController {
   })
   @ApiBearerAuth('access-token')
   @ApiBody({ type: PayWithMethodDto, required: false })
-  @UseGuards(AuthGuard('reader'))
+  @UseGuards(AuthGuard('reader', 'author'))
   @HttpCode(HttpStatus.OK)
   async unlockBlog(
     @Req() req: Request,
@@ -131,7 +131,7 @@ export class PaymentController {
   })
   @ApiBearerAuth('access-token')
   @ApiBody({ type: PayWithMethodDto, required: false })
-  @UseGuards(AuthGuard('reader'))
+  @UseGuards(AuthGuard('reader', 'author'))
   @HttpCode(HttpStatus.OK)
   async subscribeToPlan(
     @Req() req: Request,

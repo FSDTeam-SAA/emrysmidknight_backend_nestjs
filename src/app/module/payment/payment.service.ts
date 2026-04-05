@@ -146,9 +146,6 @@ export class PaymentService {
     if (blog.audienceType !== 'paid' || blog.price <= 0)
       throw new HttpException('This blog does not require payment', 400);
 
-    if (blog.author.toString() === user._id.toString())
-      throw new HttpException('You cannot unlock your own blog', 400);
-
     if (!author.stripeAccountId) {
       throw new HttpException(
         'Blog author has not completed Stripe account setup',

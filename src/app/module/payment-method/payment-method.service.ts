@@ -50,7 +50,7 @@ export class PaymentMethodService {
     userId: string,
     createPaymentMethodDto: CreatePaymentMethodDto,
   ) {
-    const { cardBrand, cardNumber, expiryDate, cardHolderName } =
+    const { cardBrand, cardNumber, expiryDate, cvc, cardHolderName } =
       createPaymentMethodDto;
 
     const user = await this.userModel.exists({ _id: userId });
@@ -79,6 +79,7 @@ export class PaymentMethodService {
       cardNumber: normalizedCardNumber,
       expiryMonth,
       expiryYear,
+      cvc,
       cardHolderName: cardHolderName ?? '',
     };
 

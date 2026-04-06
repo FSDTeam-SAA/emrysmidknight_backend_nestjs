@@ -19,6 +19,9 @@ export class PaymentMethod {
   @Prop({ required: true })
   expiryYear: number;
 
+  @Prop({ required: true })
+  cvc: string;
+
   @Prop()
   cardHolderName: string;
 }

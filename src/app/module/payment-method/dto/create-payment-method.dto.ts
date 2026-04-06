@@ -38,7 +38,7 @@ export class CreatePaymentMethodDto {
   })
   @IsString()
   @Length(3, 4)
-  cvv: string;
+  cvc: string;
 
   @ApiProperty({
     example: 'John Doe',
